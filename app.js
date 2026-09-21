@@ -310,16 +310,20 @@ function loadData() {
 function updateBaseInfoUI() {
   const total = database && database.embarques ? Object.keys(database.embarques).length : 0;
   const navBadge = document.getElementById('navBaseCount');
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+  const dataBase = database?.data_base || (database?.gerado_em ? database.gerado_em.split(' ')[0] : dataHoje);
+
   if (navBadge) {
-    navBadge.textContent = `📊 Base: ${total} Registros`;
+    navBadge.textContent = `📊 Base (${dataBase}): ${total} Cargas`;
   }
 
   const infoDetails = document.getElementById('infoBaseDetails');
   if (infoDetails) {
     infoDetails.innerHTML = `
+      <b>Data da Base Operacional:</b> ${dataBase} (Hoje: ${dataHoje})<br>
       <b>Total de Registros de Embarques:</b> ${total}<br>
-      <b>Status de Sincronização:</b> Local & Memória Persistente Ativa.<br>
-      <b>Última atualização:</b> ${database?.gerado_em || 'Recente'}
+      <b>Status de Sincronização:</b> Memória Local & Persistente Ativa.<br>
+      <b>Última Carga / Atualização:</b> ${database?.gerado_em || 'Recente'}
     `;
   }
 }

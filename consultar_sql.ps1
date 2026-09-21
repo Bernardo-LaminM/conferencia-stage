@@ -1,23 +1,24 @@
 param(
-    [string]$ServerInstance = "SEU_SERVIDOR_SQL", # Ex: SRV-DATAREPLICA ou IP,1433
+    [string]$ServerInstance = "sqlwrhitatiaiaprod.b05aaf70da1f.database.windows.net",
     [string]$Database = "ITATIAIA",
     [string]$Embarque = "",
-    [switch]$UseWindowsAuth = $true,
-    [string]$User = "",
-    [string]$Password = "",
+    [switch]$UseWindowsAuth = $false,
+    [string]$User = "paineloperacional.im@pg.com",
+    [string]$Password = "!Powerbi00000001",
     [string]$OutputDir = "$PSScriptRoot"
 )
 
-# Constrói a Connection String
+# Constrói a Connection String para Azure SQL Database
 if ($UseWindowsAuth) {
-    $connString = "Server=$ServerInstance;Database=$Database;Integrated Security=True;TrustServerCertificate=True;"
+    $connString = "Server=tcp:$ServerInstance,1433;Database=$Database;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;Connection Timeout=30;"
 } else {
-    $connString = "Server=$ServerInstance;Database=$Database;User Id=$User;Password=$Password;TrustServerCertificate=True;"
+    $connString = "Server=tcp:$ServerInstance,1433;Database=$Database;User Id=$User;Password=$Password;Encrypt=True;TrustServerCertificate=True;Connection Timeout=30;"
 }
 
 Write-Host "=========================================================" -ForegroundColor Cyan
-Write-Host " CONSULTA DIRETA AO DATAREPLICA (SQL SERVER)" -ForegroundColor Green
-Write-Host " Servidor: $ServerInstance | Banco: $Database" -ForegroundColor Yellow
+Write-Host " CONSULTA DIRETA AO DATAREPLICA AZURE SQL" -ForegroundColor Green
+Write-Host " Servidor: $ServerInstance" -ForegroundColor Yellow
+Write-Host " Banco:    $Database | Usuario: $User" -ForegroundColor Yellow
 Write-Host " View:     [itatiaia].[SHIPPING_PCKWRK_VIEW_SIMPLIFICADA]" -ForegroundColor Yellow
 Write-Host "=========================================================" -ForegroundColor Cyan
 

@@ -98,11 +98,14 @@ function Extract-WorkbookData($path) {
         Write-Host " -> Detectado Formato TABULAR DE VIEW / CONSULTA SQL (car_move, etiqueta, stage)..." -ForegroundColor Cyan
         
         $colCarMove  = if ($headerMap.ContainsKey('car_move')) { $headerMap['car_move'] } elseif ($headerMap.ContainsKey('car_move_id')) { $headerMap['car_move_id'] } else { 'A' }
+        $colOrderNum = if ($headerMap.ContainsKey('order_num')) { $headerMap['order_num'] } elseif ($headerMap.ContainsKey('ordnum')) { $headerMap['ordnum'] } else { 'B' }
         $colEtiqueta = if ($headerMap.ContainsKey('etiqueta')) { $headerMap['etiqueta'] } elseif ($headerMap.ContainsKey('pallet_id')) { $headerMap['pallet_id'] } else { 'C' }
         $colStage    = if ($headerMap.ContainsKey('stage')) { $headerMap['stage'] } elseif ($headerMap.ContainsKey('dstloc')) { $headerMap['dstloc'] } else { 'D' }
         $colSku      = if ($headerMap.ContainsKey('sku')) { $headerMap['sku'] } elseif ($headerMap.ContainsKey('prtnum')) { $headerMap['prtnum'] } else { 'E' }
-        $colLote     = if ($headerMap.ContainsKey('lote')) { $headerMap['lote'] } else { 'F' }
+        $colLote     = if ($headerMap.ContainsKey('lote')) { $headerMap['lote'] } elseif ($headerMap.ContainsKey('lotnum')) { $headerMap['lotnum'] } else { 'F' }
         $colCaixas   = if ($headerMap.ContainsKey('caixas')) { $headerMap['caixas'] } elseif ($headerMap.ContainsKey('qtd_caixas')) { $headerMap['qtd_caixas'] } elseif ($headerMap.ContainsKey('qtd')) { $headerMap['qtd'] } else { 'G' }
+        $colAreaOrig = if ($headerMap.ContainsKey('area_origem')) { $headerMap['area_origem'] } elseif ($headerMap.ContainsKey('srcloc')) { $headerMap['srcloc'] } else { 'H' }
+        $colSps      = if ($headerMap.ContainsKey('sps')) { $headerMap['sps'] } else { 'I' }
 
         $rows = $xml1.worksheet.sheetData.row
         for ($i = 1; $i -lt $rows.Count; $i++) {
@@ -114,10 +117,13 @@ function Extract-WorkbookData($path) {
             }
 
             $embId = if ($cells.ContainsKey($colCarMove)) { $cells[$colCarMove].Trim() } else { "" }
+            $ordId = if ($cells.ContainsKey($colOrderNum)) { $cells[$colOrderNum].Trim() } else { "" }
             $palId = if ($cells.ContainsKey($colEtiqueta)) { $cells[$colEtiqueta].Trim() } else { "" }
             $stg   = if ($cells.ContainsKey($colStage)) { $cells[$colStage].Trim() } else { "" }
             $sku   = if ($cells.ContainsKey($colSku)) { $cells[$colSku].Trim() } else { "" }
             $lote  = if ($cells.ContainsKey($colLote)) { $cells[$colLote].Trim() } else { "" }
+            $areaO = if ($cells.ContainsKey($colAreaOrig)) { $cells[$colAreaOrig].Trim() } else { "" }
+            $spsV  = if ($cells.ContainsKey($colSps)) { $cells[$colSps].Trim() } else { "" }
             $qtdRaw = if ($cells.ContainsKey($colCaixas)) { $cells[$colCaixas].Trim() } else { "0" }
             $qtd = 0
             [int]::TryParse($qtdRaw, [ref]$qtd) | Out-Null
@@ -139,6 +145,9 @@ function Extract-WorkbookData($path) {
                 $embObj.paletes[$palId] = [ordered]@{
                     palete = $palId
                     stage = $stg
+                    order_num = $ordId
+                    area_origem = $areaO
+                    sps = $spsV
                     itens = [System.Collections.Generic.List[object]]::new()
                     qtd_total = 0
                     sku_resumo = $sku
@@ -147,7 +156,14 @@ function Extract-WorkbookData($path) {
             }
 
             $pObj = $embObj.paletes[$palId]
-            $pObj.itens.Add([ordered]@{ sku = $sku; lote = $lote; qtd = $qtd })
+            $pObj.itens.Add([ordered]@{ 
+                sku = $sku
+                lote = $lote
+                qtd = $qtd
+                order_num = $ordId
+                area_origem = $areaO
+                sps = $spsV 
+            })
             $pObj.qtd_total += $qtd
         }
     } else {
