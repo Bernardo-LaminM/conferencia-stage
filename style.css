@@ -735,3 +735,103 @@ body {
   from { transform: translateY(-20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+
+/* Card de Investigação de Divergência & Acionamento de Inventário */
+.div-investigation-box {
+  background: #FFF5F5;
+  border: 1px solid #FECACA;
+  border-left: 4px solid var(--status-err);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-top: 10px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  animation: fadeInModal 0.2s ease-out;
+}
+.div-investigation-title {
+  font-weight: 800;
+  color: #991B1B;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.div-info-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+.btn-copy-ticket {
+  background: #DC2626;
+  color: #FFFFFF;
+  border: none;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+.btn-copy-ticket:hover {
+  background: #B91C1C;
+}
+
+/* Badges de Evolução da Base */
+.badge-evol-add { background: #ECFDF5; color: #059669; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; }
+.badge-evol-del { background: #FEF2F2; color: #DC2626; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; }
+.badge-evol-same { background: #F1F5F9; color: #475569; font-weight: 600; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; }
+
+/* Abas no Modal de Histórico Unificado */
+.hist-tabs-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 14px;
+}
+.hist-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.hist-tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-muted);
+}
+.hist-tab-btn.active {
+  color: var(--dhl-red);
+  border-bottom: 2px solid var(--dhl-red);
+  background: #FFF5F5;
+}
+.hist-tab-pane {
+  display: none;
+}
+.hist-tab-pane.active {
+  display: block;
+}
+.nav-status-chip {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}

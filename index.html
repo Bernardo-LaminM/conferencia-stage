@@ -19,18 +19,16 @@
       </div>
     </div>
     <div class="nav-actions">
-      <button id="btnUploadModal" class="btn-icon-nav" title="Importar / Atualizar Planilha Excel (.xlsx)">
-        <span>📥</span> Atualizar Excel
+      <button id="btnUploadModal" class="btn-icon-nav" title="Importar / Atualizar Planilha Excel (.xlsx)" onclick="openUploadModal()">
+        <span>📥</span> Atualizar Base
       </button>
-      <button id="btnVerHistorico" class="btn-icon-nav" title="Histórico de Auditorias e Conferências">
+      <button id="btnVerHistorico" class="btn-icon-nav" title="Histórico da Ferramenta" onclick="openHistoryModal('conf')">
         <span>📜</span> Histórico (<span id="navHistCount">0</span>)
       </button>
-      <button id="btnInfoBase" class="btn-icon-nav" title="Informações da Base">
-        <span id="navBaseCount">📊 Base: Carregando...</span>
+      <button id="btnSoundToggle" class="btn-icon-nav" title="Alternar Som" onclick="toggleSound()">
+        <span id="soundIcon">🔊</span> Som
       </button>
-      <button id="btnSoundToggle" class="btn-icon-nav" title="Alternar Som e Voz">
-        <span id="soundIcon">🔊</span> Som & Voz
-      </button>
+      <div id="navBaseCount" class="nav-status-chip" onclick="document.getElementById('modalBase').style.display='flex'" style="cursor: pointer;" title="Clique para ver detalhes da base">📊 Base: Carregando...</div>
     </div>
   </nav>
 
@@ -219,63 +217,137 @@
   </div>
 
   <!-- =========================================================
-       MODAL 2: HISTÓRICO DE AUDITORIAS E CONFERÊNCIAS
+       MODAL: HISTÓRICO COMPLETO DA FERRAMENTA (ABAS UNIFICADAS)
        ========================================================= -->
   <div id="modalHistorico" class="modal-backdrop">
     <div class="modal-clean-box modal-lg">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px;">
         <div>
-          <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Histórico de Auditorias e Conferências</h2>
-          <span style="font-size: 0.78rem; color: var(--text-muted);">Registro permanente de todas as conferências de stage efetuadas</span>
+          <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin: 0;">Histórico da Ferramenta</h2>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Auditorias, ocorrências de inventário e evolução de carga</span>
         </div>
         <button id="btnCloseModalHist" class="btn-close-x">&times;</button>
       </div>
 
-      <!-- KPIs do Histórico -->
-      <div class="hist-kpi-bar">
-        <div class="hist-kpi-item">
-          <span class="kpi-label">Auditorias Salvas</span>
-          <span id="histTotalCount" class="kpi-val">0</span>
+      <!-- Abas Internas -->
+      <div class="hist-tabs-bar">
+        <button class="hist-tab-btn active" id="tabBtnConf" onclick="switchHistTab('conf')">
+          📦 Conferências (<span id="tabBadgeConf">0</span>)
+        </button>
+        <button class="hist-tab-btn" id="tabBtnOcorr" onclick="switchHistTab('ocorr')">
+          🚨 Ocorrências / Inventário (<span id="tabBadgeOcorr">0</span>)
+        </button>
+        <button class="hist-tab-btn" id="tabBtnEvol" onclick="switchHistTab('evol')">
+          📈 Evolução da Base (<span id="tabBadgeEvol">0</span>)
+        </button>
+      </div>
+
+      <!-- ABA 1: CONFERÊNCIAS DE STAGE -->
+      <div id="paneConf" class="hist-tab-pane active">
+        <!-- KPIs do Histórico -->
+        <div class="hist-kpi-bar">
+          <div class="hist-kpi-item">
+            <span class="kpi-label">Auditorias Salvas</span>
+            <span id="histTotalCount" class="kpi-val">0</span>
+          </div>
+          <div class="hist-kpi-item">
+            <span class="kpi-label">Paletes Auditados</span>
+            <span id="histTotalPaletes" class="kpi-val green">0</span>
+          </div>
+          <div class="hist-kpi-item">
+            <span class="kpi-label">Divergências Detectadas</span>
+            <span id="histTotalDivergencias" class="kpi-val red">0</span>
+          </div>
         </div>
-        <div class="hist-kpi-item">
-          <span class="kpi-label">Paletes Auditados</span>
-          <span id="histTotalPaletes" class="kpi-val green">0</span>
+
+        <div class="hist-table-wrap">
+          <table class="clean-data-table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>Embarque</th>
+                <th>Operador</th>
+                <th>Stage</th>
+                <th>Progresso</th>
+                <th>Divergências</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="histTableBody"></tbody>
+          </table>
         </div>
-        <div class="hist-kpi-item">
-          <span class="kpi-label">Divergências Detectadas</span>
-          <span id="histTotalDivergencias" class="kpi-val red">0</span>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; border-top: 1px solid var(--border-light); padding-top: 12px;">
+          <button id="btnExportarTodoHistorico" class="btn-secondary-clean" style="margin-left: 0;">
+            📥 Exportar Conferências (CSV)
+          </button>
+          <button id="btnFecharModalHist" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 20px;">
+            Fechar
+          </button>
         </div>
       </div>
 
-      <!-- Tabela do Histórico -->
-      <div id="histTableContainer" class="hist-table-wrap">
-        <table class="clean-data-table">
-          <thead>
-            <tr>
-              <th>Data/Hora</th>
-              <th>Embarque</th>
-              <th>Operador</th>
-              <th>Stage</th>
-              <th>Progresso</th>
-              <th>Divergências</th>
-              <th>Status</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="histTableBody">
-            <!-- Linhas inseridas via JS -->
-          </tbody>
-        </table>
+      <!-- ABA 2: OCORRÊNCIAS DE INVENTÁRIO (PALETES DE OUTROS EMBARQUES) -->
+      <div id="paneOcorr" class="hist-tab-pane">
+        <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 10px;">
+          Paletes bipados que não pertenciam ao embarque auditado. Use para acionar e corrigir no inventário:
+        </div>
+        <div class="hist-table-wrap">
+          <table class="clean-data-table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>LPN Bipada</th>
+                <th>Stage Físico</th>
+                <th>Embarque Bipado</th>
+                <th>Embarque Correto (WMS)</th>
+                <th>Stage Correto</th>
+                <th>Material / SKU</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="tableOcorrenciasBody"></tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; border-top: 1px solid var(--border-light); padding-top: 12px;">
+          <button id="btnExportarOcorrenciasCSV" class="btn-secondary-clean" style="margin-left: 0;">
+            📥 Exportar Ocorrências para Inventário (CSV)
+          </button>
+          <button class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 20px;" onclick="document.getElementById('modalHistorico').style.display='none'">
+            Fechar
+          </button>
+        </div>
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; border-top: 1px solid var(--border-light); padding-top: 14px;">
-        <button id="btnExportarTodoHistorico" class="btn-secondary-clean" style="margin-left: 0;">
-          📥 Exportar Histórico Completo (CSV)
-        </button>
-        <button id="btnFecharModalHist" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 20px;">
-          Fechar
-        </button>
+      <!-- ABA 3: EVOLUÇÃO DA BASE (VERSIONAMENTO) -->
+      <div id="paneEvol" class="hist-tab-pane">
+        <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 10px;">
+          Histórico de evolução e atualização da base. Permite acompanhar paletes adicionados ou excluídos pelo WMS:
+        </div>
+        <div class="hist-table-wrap">
+          <table class="clean-data-table">
+            <thead>
+              <tr>
+                <th>Data/Hora Atualização</th>
+                <th>Arquivo Origem</th>
+                <th>Total Embarques</th>
+                <th>Total Paletes Base</th>
+                <th>Alterações Detectadas</th>
+              </tr>
+            </thead>
+            <tbody id="tableEvolucaoBody"></tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 16px; border-top: 1px solid var(--border-light); padding-top: 12px;">
+          <button class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 20px;" onclick="document.getElementById('modalHistorico').style.display='none'">
+            Fechar
+          </button>
+        </div>
       </div>
+
     </div>
   </div>
 
@@ -294,7 +366,7 @@
       <div style="background: #F8FAFC; border: 1px solid var(--border-light); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
         <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Como atualizar a base:</div>
         <div style="font-size: 0.88rem; color: var(--text-primary); margin-top: 6px; line-height: 1.5;">
-          <b>Opção 1 (Online/Direto):</b> Clique em <b>"Atualizar Excel"</b> na barra superior e selecione o arquivo.<br><br>
+          <b>Opção 1 (Online/Direto):</b> Clique em <b>"Atualizar Base"</b> na barra superior e selecione o arquivo Excel.<br><br>
           <b>Opção 2 (Automático Windows):</b> Salve o relatório na pasta <b>Downloads</b> e execute o <b>ATUALIZAR_BASE.bat</b>.
         </div>
       </div>

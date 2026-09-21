@@ -22,7 +22,7 @@ class SoundFX {
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'pt-BR';
-      utter.rate = 1.35;
+      utter.rate = 1.30;
       window.speechSynthesis.speak(utter);
     } catch(e) {}
   }
@@ -94,6 +94,8 @@ const sound = new SoundFX();
 const STORAGE_HISTORY_KEY = 'dhl_stage_audit_history_v1';
 const STORAGE_DATABASE_OVERRIDE_KEY = 'dhl_stage_database_custom_v1';
 const STORAGE_ACTIVE_SESSION_KEY = 'dhl_stage_active_session_v1';
+const STORAGE_INVENTORY_ALERTS_KEY = 'dhl_stage_inventory_alerts_v1';
+const STORAGE_BASE_VERSIONS_KEY = 'dhl_stage_base_versions_v1';
 
 /* =========================================================
    ESTADO DA APLICAÇÃO
@@ -148,8 +150,19 @@ function saveStoredHistory(historyList) {
 
 function updateHistoryBadge() {
   const historyList = getStoredHistory();
+  const alerts = getStoredInventoryAlerts();
+  const versions = getStoredBaseVersions();
+
   const badge = document.getElementById('navHistCount');
   if (badge) badge.textContent = historyList.length;
+
+  const tabBadgeConf = document.getElementById('tabBadgeConf');
+  const tabBadgeOcorr = document.getElementById('tabBadgeOcorr');
+  const tabBadgeEvol = document.getElementById('tabBadgeEvol');
+
+  if (tabBadgeConf) tabBadgeConf.textContent = historyList.length;
+  if (tabBadgeOcorr) tabBadgeOcorr.textContent = alerts.length;
+  if (tabBadgeEvol) tabBadgeEvol.textContent = versions.length;
 
   const totalCountElem = document.getElementById('histTotalCount');
   const totalPaletesElem = document.getElementById('histTotalPaletes');
@@ -166,6 +179,47 @@ function updateHistoryBadge() {
 
   if (totalPaletesElem) totalPaletesElem.textContent = totalAudPaletes;
   if (totalDivElem) totalDivElem.textContent = totalAudDivs;
+}
+
+function updateAlertsBadge() {
+  updateHistoryBadge();
+}
+
+/* =========================================================
+   PERSISTÊNCIA DE OCORRÊNCIAS DE INVENTÁRIO (PALETES TROCADOS)
+   ========================================================= */
+function getStoredInventoryAlerts() {
+  try {
+    const raw = localStorage.getItem(STORAGE_INVENTORY_ALERTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function saveInventoryAlert(alertObj) {
+  try {
+    const list = getStoredInventoryAlerts();
+    list.unshift(alertObj);
+    localStorage.setItem(STORAGE_INVENTORY_ALERTS_KEY, JSON.stringify(list));
+    updateHistoryBadge();
+  } catch(e) {}
+}
+
+/* =========================================================
+   PERSISTÊNCIA DA EVOLUÇÃO E VERSIONAMENTO DA BASE
+   ========================================================= */
+function getStoredBaseVersions() {
+  try {
+    const raw = localStorage.getItem(STORAGE_BASE_VERSIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function saveBaseVersion(versionObj) {
+  try {
+    const list = getStoredBaseVersions();
+    list.unshift(versionObj);
+    localStorage.setItem(STORAGE_BASE_VERSIONS_KEY, JSON.stringify(list));
+  } catch(e) {}
 }
 
 function recordActiveConferenceToHistory(status = 'Em Andamento') {
@@ -195,7 +249,6 @@ function recordActiveConferenceToHistory(status = 'Em Andamento') {
     historico: activeConference.historico
   };
 
-  // Se já existir registro para essa sessão de conferência, atualiza; senão insere no topo
   const existingIdx = historyList.findIndex(h => h.id === serializedRecord.id || (h.embarqueId === serializedRecord.embarqueId && h.status === 'Em Andamento'));
   if (existingIdx >= 0) {
     historyList[existingIdx] = serializedRecord;
@@ -241,7 +294,6 @@ function loadData() {
     if (savedCustom) {
       const customDb = JSON.parse(savedCustom);
       if (customDb && customDb.embarques) {
-        // Mescla mantendo segurança
         Object.keys(customDb.embarques).forEach(embId => {
           database.embarques[embId] = customDb.embarques[embId];
         });
@@ -259,13 +311,13 @@ function updateBaseInfoUI() {
   const total = database && database.embarques ? Object.keys(database.embarques).length : 0;
   const navBadge = document.getElementById('navBaseCount');
   if (navBadge) {
-    navBadge.textContent = `📊 Base: ${total} Embarques`;
+    navBadge.textContent = `📊 Base: ${total} Registros`;
   }
 
   const infoDetails = document.getElementById('infoBaseDetails');
   if (infoDetails) {
     infoDetails.innerHTML = `
-      <b>Total de Embarques Disponíveis:</b> ${total}<br>
+      <b>Total de Registros de Embarques:</b> ${total}<br>
       <b>Status de Sincronização:</b> Local & Memória Persistente Ativa.<br>
       <b>Última atualização:</b> ${database?.gerado_em || 'Recente'}
     `;
@@ -283,7 +335,7 @@ function showToast(message, duration = 4000) {
 }
 
 /* =========================================================
-   PARSER DE PLANILHAS EXCEL (GUIA DE CONFERÊNCIA + WMS)
+   PARSER DE PLANILHAS EXCEL (TABULAR + GUIA + WMS)
    ========================================================= */
 function processExcelFile(file) {
   const feedback = document.getElementById('uploadFeedback');
@@ -303,16 +355,14 @@ function processExcelFile(file) {
       
       let parsedEmbarques = {};
 
-      // 1. Verifica se é o formato TABULAR ou GUIA DE CONFERÊNCIA
-      let isGuia = false;
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
 
       const firstRowStr = (rawRows[0] || []).join(' ').toLowerCase();
-      if (firstRowStr.includes('car_move') || firstRowStr.includes('etiqueta')) {
+      let isGuia = false;
+      if (firstRowStr.includes('car_move') || firstRowStr.includes('etiqueta') || firstRowStr.includes('ordnum')) {
         isGuia = false;
       } else {
-        // Detecta palavras-chave do template antigo de Guia de Conferência
         for (let r = 0; r < Math.min(rawRows.length, 30); r++) {
           const rowStr = (rawRows[r] || []).join(' ').toUpperCase();
           if (rowStr.includes('GUIA DE CONFERÊNCIA') || (rowStr.includes('EMBARQUE:') && rowStr.includes('STAGE:'))) {
@@ -325,7 +375,6 @@ function processExcelFile(file) {
       if (isGuia) {
         parsedEmbarques = parseGuiaConferenciaSheet(rawRows);
       } else {
-        // 2. Tenta formato WMS padrão (com abas de Alocação e Materiais) ou View Simples
         parsedEmbarques = parseWmsWorkbook(workbook);
       }
 
@@ -334,17 +383,42 @@ function processExcelFile(file) {
         throw new Error('Não foi possível identificar dados de embarque/paletes nesta planilha. Verifique o formato.');
       }
 
-      // Mescla com a base existente SEM PERDER NENHUM HISTÓRICO
+      // Estatísticas para Evolução da Base
+      let novosAdicionados = 0;
       if (!database) database = { embarques: {} };
+
       embKeys.forEach(embId => {
+        if (!database.embarques[embId]) novosAdicionados++;
         database.embarques[embId] = parsedEmbarques[embId];
       });
+
+      let totalPaletesDepois = 0;
+      Object.values(database.embarques).forEach(e => {
+        if (e && e.embarque) totalPaletesDepois += (e.total_paletes || 0);
+      });
+      const totalEmbarquesDepois = Object.keys(database.embarques).length;
+
+      // Grava snapshot na Evolução da Base
+      const evolSnapshot = {
+        data: new Date().toLocaleString('pt-BR'),
+        arquivo: file.name,
+        totalEmbarques: totalEmbarquesDepois,
+        totalPaletes: totalPaletesDepois,
+        detalhes: `+${embKeys.length} embarques atualizados (${novosAdicionados} novos). Base consolidada com ${totalPaletesDepois} paletes.`
+      };
+      saveBaseVersion(evolSnapshot);
 
       // Salva no localStorage a base mesclada
       try {
         localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(database));
       } catch(errStorage) {
         console.warn('Armazenamento local cheio, mantendo em memória ativa:', errStorage);
+      }
+
+      // Se havia conferência ativa deste embarque, sincroniza o activeEmbarque sem perder os conferidos!
+      if (activeConference.embarqueId && database.embarques[activeConference.embarqueId]) {
+        activeEmbarque = database.embarques[activeConference.embarqueId];
+        updateUI();
       }
 
       updateBaseInfoUI();
@@ -357,9 +431,8 @@ function processExcelFile(file) {
           <div style="background: var(--status-ok-bg); border: 1px solid var(--status-ok-border); color: #065F46; padding: 14px; border-radius: var(--radius-sm); font-size: 0.9rem;">
             <b>✔ Importação Concluída com Sucesso!</b><br>
             • Arquivo: <b>${file.name}</b><br>
-            • Embarque Carregado: <b>${firstEmb}</b><br>
-            • Total de Paletes (LPNs): <b>${firstData.total_paletes}</b> | Caixas: <b>${firstData.total_pecas}</b><br>
-            • Stage: <b>${formatStages(firstData.stages)}</b><br>
+            • Embarques no Arquivo: <b>${embKeys.length}</b><br>
+            • Exemplo Carregado: <b>${firstEmb}</b> (${firstData.total_paletes} paletes, Stage ${formatStages(firstData.stages)})<br>
             <div style="margin-top: 10px;">
               <button id="btnIniciarEmbarqueImportado" class="btn-finish-clean" style="padding: 6px 14px; font-size: 0.8rem;">
                 Iniciar Conferência do Embarque ${firstEmb} Agora
@@ -376,9 +449,8 @@ function processExcelFile(file) {
         });
       }
 
-      showToast(`✔ Planilha carregada! Embarque <b>${firstEmb}</b> disponível.`);
+      showToast(`✔ Planilha carregada! ${embKeys.length} embarques sincronizados.`);
 
-      // Preenche o input do login caso o usuário queira
       const inputEmb = document.getElementById('inputEmbarque');
       if (inputEmb && !inputEmb.value) {
         inputEmb.value = firstEmb;
@@ -403,7 +475,6 @@ function parseGuiaConferenciaSheet(rows) {
   let defaultStage = '';
   let headerRowIndex = -1;
 
-  // Busca cabeçalho do embarque e stage
   for (let r = 0; r < Math.min(rows.length, 25); r++) {
     const row = rows[r] || [];
     for (let c = 0; c < row.length; c++) {
@@ -423,7 +494,6 @@ function parseGuiaConferenciaSheet(rows) {
   }
 
   if (!embarqueId) {
-    // Tenta achar qualquer número de 7 ou 8 dígitos nas primeiras linhas
     for (let r = 0; r < Math.min(rows.length, 15); r++) {
       const row = rows[r] || [];
       for (let c = 0; c < row.length; c++) {
@@ -438,14 +508,13 @@ function parseGuiaConferenciaSheet(rows) {
   }
 
   if (!embarqueId) embarqueId = 'EMB_' + Date.now().toString().slice(-6);
-  if (headerRowIndex === -1) headerRowIndex = 25; // Linha 26 padrão
+  if (headerRowIndex === -1) headerRowIndex = 25;
 
   const paletesDict = new Map();
   let currentLpn = '';
   const stagesSet = new Set();
   if (defaultStage) stagesSet.add(defaultStage);
 
-  // Varre linhas de paletes a partir da linha após o header
   for (let r = headerRowIndex + 1; r < rows.length; r++) {
     const row = rows[r] || [];
     if (row.length === 0) continue;
@@ -456,12 +525,10 @@ function parseGuiaConferenciaSheet(rows) {
     const colD = row[3];
     const colE = String(row[4] || '').trim();
 
-    // Se encontrar rodapé ou assinaturas, interrompe
     if (colA.includes('ASS.') || colC.includes('ASS.') || colB === 'OK' || colB === 'NOK') {
       break;
     }
 
-    // Col B é a LPN
     if (colB && colB.length >= 8 && /^\d+$/.test(colB)) {
       currentLpn = colB;
     }
@@ -486,11 +553,7 @@ function parseGuiaConferenciaSheet(rows) {
       }
 
       const pObj = paletesDict.get(currentLpn);
-      pObj.itens.push({
-        sku: skuDesc,
-        lote: lote,
-        qtd: qty
-      });
+      pObj.itens.push({ sku: skuDesc, lote: lote, qtd: qty });
       pObj.qtd_total += qty;
     }
   }
@@ -500,7 +563,7 @@ function parseGuiaConferenciaSheet(rows) {
   paletesList.forEach(p => totalPecas += p.qtd_total);
 
   const result = {};
-  result[embarqueId] = {
+  const embData = {
     embarque: embarqueId,
     total_paletes: paletesList.length,
     total_pecas: totalPecas,
@@ -508,11 +571,16 @@ function parseGuiaConferenciaSheet(rows) {
     paletes: paletesList
   };
 
+  result[embarqueId] = embData;
+  const cleanKey = embarqueId.replace(/^0+/, '');
+  if (cleanKey && cleanKey !== embarqueId) {
+    result[cleanKey] = embData;
+  }
+
   return result;
 }
 
 function parseWmsWorkbook(workbook) {
-  // Tenta encontrar aba de alocação e aba de materiais
   let allocSheet = null;
   let matSheet = null;
 
@@ -530,7 +598,6 @@ function parseWmsWorkbook(workbook) {
     allocSheet = workbook.Sheets[workbook.SheetNames[0]];
   }
 
-  // Mapeia materiais se houver
   const skuMap = new Map();
   if (matSheet) {
     const matRows = XLSX.utils.sheet_to_json(matSheet, { header: 1, defval: '' });
@@ -619,7 +686,6 @@ function parseWmsWorkbook(workbook) {
 
     finalResult[embId] = embData;
 
-    // Também indexa sem zeros à esquerda para o operador encontrar facilmente
     const cleanKey = embId.replace(/^0+/, '');
     if (cleanKey && cleanKey !== embId) {
       finalResult[cleanKey] = embData;
@@ -670,7 +736,6 @@ function entrarNoEmbarque() {
     activeEmbarque.paletes = [activeEmbarque.paletes];
   }
 
-  // Verifica se já existia uma conferência em andamento para este embarque
   let restored = false;
   const historyList = getStoredHistory();
   const existingAudit = historyList.find(h => h.embarqueId === embId && h.status === 'Em Andamento');
@@ -686,7 +751,7 @@ function entrarNoEmbarque() {
       historico: existingAudit.historico || []
     };
     restored = true;
-    showToast(`Restaurada conferência em andamento com <b>${activeConference.conferidos.size}</b> paletes já validados.`);
+    showToast(`Restaurada conferência com <b>${activeConference.conferidos.size}</b> paletes já validados.`);
   } else {
     activeConference = {
       embarqueId: embId,
@@ -706,7 +771,6 @@ function entrarNoEmbarque() {
   hideFeedback();
   updateUI();
 
-  // Registra no histórico como 'Em Andamento'
   recordActiveConferenceToHistory('Em Andamento');
   persistActiveSession();
 
@@ -754,7 +818,7 @@ function focusScanner() {
 }
 
 /* =========================================================
-   BIPAGEM AUTOMÁTICA DE LPN (SEM ENTER)
+   BUSCA INTELIGENTE DE LPN & INVESTIGAÇÃO CRUZADA DE STAGE
    ========================================================= */
 function findPalletMatch(code) {
   if (!activeEmbarque || !activeEmbarque.paletes || !code) return null;
@@ -772,7 +836,7 @@ function findPalletMatch(code) {
     const cNoZeros = c.replace(/^0+/, '');
     if (pNoZeros === cNoZeros) return true;
 
-    // 3. Match de prefixo ou sufixo (cobre 18 dígitos vs 20 dígitos)
+    // 3. Match de prefixo ou sufixo (18 dígitos vs 20 dígitos)
     if (c.length >= 14 && pClean.length >= 14) {
       if (pClean.startsWith(c) || c.startsWith(pClean)) return true;
       if (pClean.endsWith(c) || c.endsWith(pClean)) return true;
@@ -784,12 +848,44 @@ function findPalletMatch(code) {
   });
 }
 
+function findPalletAcrossAllEmbarques(code) {
+  if (!database || !database.embarques || !code) return null;
+  const c = normalizeBarcode(code);
+  const cNoZeros = c.replace(/^0+/, '');
+
+  for (const embId of Object.keys(database.embarques)) {
+    const emb = database.embarques[embId];
+    if (emb.embarque !== embId) continue; // ignora aliases
+
+    for (const p of emb.paletes) {
+      const pClean = normalizeBarcode(p.palete);
+      const pNoZeros = pClean.replace(/^0+/, '');
+
+      const isMatch = (pClean === c) ||
+                      (pNoZeros === cNoZeros) ||
+                      (c.length >= 14 && pClean.length >= 14 && (
+                        pClean.startsWith(c) || c.startsWith(pClean) ||
+                        pClean.endsWith(c) || c.endsWith(pClean) ||
+                        pNoZeros.startsWith(cNoZeros) || cNoZeros.startsWith(pNoZeros) ||
+                        pNoZeros.endsWith(cNoZeros) || cNoZeros.endsWith(pNoZeros)
+                      ));
+
+      if (isMatch) {
+        return {
+          embarque: emb,
+          palete: p
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function handleBarcodeInput(e) {
   if (isProcessingBarcode) return;
   const val = e.target.value.trim();
   if (!val) return;
 
-  // Se já for match exato de tamanho completo (20 dígitos ou tamanho da LPN), processa imediatamente
   const directMatch = findPalletMatch(val);
   if (directMatch && (val.length === directMatch.palete.length || val.length >= 20)) {
     clearTimeout(scanDebounceTimer);
@@ -797,7 +893,6 @@ function handleBarcodeInput(e) {
     return;
   }
 
-  // Aguarda o leitor de código de barras terminar de digitar todos os caracteres
   clearTimeout(scanDebounceTimer);
   if (val.length >= 6) {
     scanDebounceTimer = setTimeout(() => {
@@ -868,23 +963,65 @@ function processBarcode(rawCode) {
       });
     }
   } else {
+    // Rastreamento na base inteira para identificar o embarque real do palete!
+    const crossMatch = findPalletAcrossAllEmbarques(code);
+    const embAuditado = activeEmbarque.embarque;
+    const stageAuditado = formatStages(activeEmbarque.stages);
+
+    let ticketDesc = '';
+    let embCorreto = 'DESCONHECIDO';
+    let stageCorreto = 'N/A';
+    let skuResumo = 'Material não planejado';
+
+    if (crossMatch) {
+      embCorreto = crossMatch.embarque.embarque;
+      stageCorreto = formatStages(crossMatch.embarque.stages);
+      skuResumo = crossMatch.palete.desc_resumo || `SKU ${crossMatch.palete.sku_resumo}`;
+      sound.playError('Divergência');
+      ticketDesc = `Pertence ao Embarque ${embCorreto} (Stage ${stageCorreto}) - ${skuResumo}`;
+    } else {
+      sound.playError('Divergência');
+      ticketDesc = 'Palete não planejado na expedição';
+    }
+
+    const alertRecord = {
+      id: Date.now(),
+      timestamp: timestampStr,
+      dataCompleta: now.toLocaleString('pt-BR'),
+      operador: activeConference.operador,
+      lpn: code,
+      stageFisico: stageAuditado,
+      embarqueAuditado: embAuditado,
+      embarqueCorreto: embCorreto,
+      stageCorreto: stageCorreto,
+      sku: skuResumo
+    };
+
+    saveInventoryAlert(alertRecord);
+
     activeConference.divergencias.unshift({
       paleteId: code,
-      timestamp: timestampStr
+      timestamp: timestampStr,
+      detalhes: ticketDesc,
+      alerta: alertRecord
     });
-    sound.playError('Divergência');
+
     triggerCardFlash('pulse-err');
-    showFeedback('err', `Divergência: LPN ${code} não pertence ao embarque ${activeEmbarque.embarque}!`);
+
+    if (crossMatch) {
+      showFeedback('err', `✖ LPN ${code} NÃO pertence ao Embarque ${embAuditado}! Pertence ao Embarque ${embCorreto} (Stage ${stageCorreto}). Registrado no Histórico.`);
+    } else {
+      showFeedback('err', `✖ LPN ${code} não localizada em nenhum embarque ativo! Registrada no Histórico.`);
+    }
 
     activeConference.historico.unshift({
       tipo: 'erro',
       palete: code,
-      desc: 'Palete não planejado neste embarque',
+      desc: ticketDesc,
       timestamp: timestampStr
     });
   }
 
-  // Persiste após cada leitura para segurança contra fechamento acidental
   recordActiveConferenceToHistory('Em Andamento');
   persistActiveSession();
 
@@ -895,6 +1032,37 @@ function processBarcode(rawCode) {
     focusScanner();
   }, 40);
 }
+
+window.copiarChamadoInventario = function(lpn, stageOndeEstava, embAuditado, embCorreto, stageCorreto, sku) {
+  const agora = new Date().toLocaleString('pt-BR');
+  const operador = activeConference?.operador || 'Operador DHL';
+
+  let msg = `[INVENTÁRIO DHL - DIVERGÊNCIA DE STAGE]\n` +
+            `• Data/Hora: ${agora}\n` +
+            `• Operador: ${operador}\n` +
+            `• LPN Bipada: ${lpn}\n` +
+            `• Stage Físico: ${stageOndeEstava} (Embarque Auditado: ${embAuditado})\n`;
+
+  if (embCorreto && embCorreto !== 'DESCONHECIDO') {
+    msg += `• Embarque Correto (Destino WMS): ${embCorreto}\n` +
+           `• Stage Correto: ${stageCorreto}\n` +
+           `• Material / SKU: ${sku}\n` +
+           `• Ação: Recolher palete do Stage ${stageOndeEstava} e levar para o Stage ${stageCorreto}.`;
+  } else {
+    msg += `• Diagnóstico: Palete não cadastrado em nenhuma expedição ativa.\n` +
+           `• Ação: Segregar palete para contagem física pelo inventário.`;
+  }
+
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(msg).then(() => {
+      showToast('✔ Informações da ocorrência copiadas!');
+    }).catch(() => {
+      prompt('Copie os dados da ocorrência:', msg);
+    });
+  } else {
+    prompt('Copie os dados da ocorrência:', msg);
+  }
+};
 
 function triggerCardFlash(className) {
   const card = document.getElementById('scannerCard');
@@ -1030,7 +1198,23 @@ function finalizarConferencia() {
   modal.style.display = 'flex';
 }
 
-function openHistoryModal() {
+window.switchHistTab = function(tabId) {
+  const tabs = [
+    { id: 'conf', btn: 'tabBtnConf', pane: 'paneConf' },
+    { id: 'ocorr', btn: 'tabBtnOcorr', pane: 'paneOcorr' },
+    { id: 'evol', btn: 'tabBtnEvol', pane: 'paneEvol' }
+  ];
+
+  tabs.forEach(t => {
+    const btn = document.getElementById(t.btn);
+    const pane = document.getElementById(t.pane);
+    const isActive = (t.id === tabId);
+    if (btn) btn.classList.toggle('active', isActive);
+    if (pane) pane.classList.toggle('active', isActive);
+  });
+};
+
+function renderHistTabConferencias() {
   const historyList = getStoredHistory();
   const tbody = document.getElementById('histTableBody');
   if (!tbody) return;
@@ -1039,7 +1223,7 @@ function openHistoryModal() {
     tbody.innerHTML = `
       <tr>
         <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">
-          Nenhuma conferência registrada ainda. Inicie ou finalize uma auditoria para registrar o histórico permanente.
+          Nenhuma conferência registrada ainda. Inicie ou finalize uma auditoria para registrar no histórico.
         </td>
       </tr>
     `;
@@ -1072,9 +1256,101 @@ function openHistoryModal() {
       `;
     }).join('');
   }
+}
 
+function renderHistTabOcorrencias() {
+  const alerts = getStoredInventoryAlerts();
+  const tbody = document.getElementById('tableOcorrenciasBody');
+  if (!tbody) return;
+
+  if (alerts.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">
+          Nenhuma ocorrência registrada. O stage está em conformidade física.
+        </td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML = alerts.map((a) => {
+      const isOutro = a.embarqueCorreto && a.embarqueCorreto !== 'DESCONHECIDO';
+      return `
+        <tr>
+          <td style="white-space: nowrap; font-size: 0.8rem;">${a.dataCompleta || a.timestamp}</td>
+          <td style="font-family: monospace; font-weight: 700;">${a.lpn}</td>
+          <td><span class="badge-pill warn">Stage ${a.stageFisico}</span></td>
+          <td>${a.embarqueAuditado}</td>
+          <td style="font-weight: 800; color: ${isOutro ? 'var(--status-ok)' : 'var(--status-err)'};">
+            ${a.embarqueCorreto}
+          </td>
+          <td>${a.stageCorreto || 'N/A'}</td>
+          <td style="font-size: 0.82rem; color: var(--text-secondary);">${a.sku || '-'}</td>
+          <td>
+            <button class="btn-secondary-clean" style="padding: 4px 8px; font-size: 0.75rem; margin-left: 0;" onclick="copiarChamadoInventario('${String(a.lpn || '').replace(/'/g, '')}', '${String(a.stageFisico || '').replace(/'/g, '')}', '${String(a.embarqueAuditado || '').replace(/'/g, '')}', '${String(a.embarqueCorreto || '').replace(/'/g, '')}', '${String(a.stageCorreto || '').replace(/'/g, '')}', '${String(a.sku || '').replace(/'/g, '')}')">
+              📋 Copiar
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+function renderHistTabEvolucao() {
+  const versions = getStoredBaseVersions();
+  const tbody = document.getElementById('tableEvolucaoBody');
+  if (!tbody) return;
+
+  if (versions.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">
+          Nenhum histórico de atualização de base gravado ainda. As alterações serão registradas a cada upload de Excel.
+        </td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML = versions.map(v => `
+      <tr>
+        <td style="white-space: nowrap; font-size: 0.8rem;">${v.data}</td>
+        <td><b>${v.arquivo}</b></td>
+        <td>${v.totalEmbarques} embarques</td>
+        <td>${v.totalPaletes} paletes</td>
+        <td style="font-size: 0.82rem; color: var(--text-secondary);">${v.detalhes}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+function openHistoryModal(tabId = 'conf') {
+  renderHistTabConferencias();
+  renderHistTabOcorrencias();
+  renderHistTabEvolucao();
   updateHistoryBadge();
+  window.switchHistTab(tabId);
   document.getElementById('modalHistorico').style.display = 'flex';
+}
+
+function exportarOcorrenciasCSV() {
+  const alerts = getStoredInventoryAlerts();
+  if (alerts.length === 0) {
+    alert('Nenhuma ocorrência de inventário registrada.');
+    return;
+  }
+
+  let csv = 'Data_Hora;LPN_Bipada;Stage_Onde_Estava;Embarque_Auditado;Embarque_Correto_Destino;Stage_Correto_Destino;SKU;Operador\n';
+  alerts.forEach(a => {
+    csv += `"${a.dataCompleta || a.timestamp}";"${a.lpn}";"${a.stageFisico}";"${a.embarqueAuditado}";"${a.embarqueCorreto}";"${a.stageCorreto}";"${a.sku}";"${a.operador}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Ocorrencias_Inventario_Stage_DHL.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 window.exportarCSVAuditoria = function(index) {
@@ -1192,44 +1468,58 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnTrocarEmbarque')?.addEventListener('click', trocarEmbarque);
   document.getElementById('btnReiniciarConferencia')?.addEventListener('click', reiniciarConferencia);
 
-  const btnSound = document.getElementById('btnSoundToggle');
-  if (btnSound) {
-    btnSound.addEventListener('click', () => {
-      sound.soundEnabled = !sound.soundEnabled;
-      sound.voiceEnabled = sound.soundEnabled;
+  window.toggleSound = function() {
+    sound.soundEnabled = !sound.soundEnabled;
+    sound.voiceEnabled = sound.soundEnabled;
+    const btnSound = document.getElementById('btnSoundToggle');
+    if (btnSound) {
       if (sound.soundEnabled) {
         btnSound.classList.remove('muted');
-        btnSound.innerHTML = '<span>🔊</span> Som & Voz';
+        btnSound.innerHTML = '<span id="soundIcon">🔊</span> Som';
         sound.playSuccess('Som ativado');
       } else {
         btnSound.classList.add('muted');
-        btnSound.innerHTML = '<span>🔇</span> Mudo';
+        btnSound.innerHTML = '<span id="soundIcon">🔇</span> Mudo';
       }
-    });
-  }
+    }
+  };
+
+  document.getElementById('btnSoundToggle')?.addEventListener('click', window.toggleSound);
 
   document.getElementById('btnFinalizar')?.addEventListener('click', finalizarConferencia);
   document.getElementById('btnExportarRelatorio')?.addEventListener('click', exportarCSV);
 
   // Modais de Upload e Base
-  const modalUpload = document.getElementById('modalUpload');
-  const openUploadModal = () => {
-    modalUpload.style.display = 'flex';
-    document.getElementById('uploadFeedback').style.display = 'none';
+  window.openUploadModal = function() {
+    const modalUpload = document.getElementById('modalUpload');
+    if (modalUpload) {
+      modalUpload.style.display = 'flex';
+      const fb = document.getElementById('uploadFeedback');
+      if (fb) fb.style.display = 'none';
+    }
   };
-  document.getElementById('btnUploadModal')?.addEventListener('click', openUploadModal);
-  document.getElementById('btnQuickUpload')?.addEventListener('click', openUploadModal);
-  document.getElementById('btnCloseModalUpload')?.addEventListener('click', () => { modalUpload.style.display = 'none'; });
-  document.getElementById('btnFecharUpload')?.addEventListener('click', () => { modalUpload.style.display = 'none'; });
+  window.openHistoryModal = openHistoryModal;
 
-  // Modal de Histórico
-  document.getElementById('btnVerHistorico')?.addEventListener('click', openHistoryModal);
+  document.getElementById('btnUploadModal')?.addEventListener('click', window.openUploadModal);
+  document.getElementById('btnQuickUpload')?.addEventListener('click', window.openUploadModal);
+  document.getElementById('btnCloseModalUpload')?.addEventListener('click', () => { 
+    const m = document.getElementById('modalUpload');
+    if (m) m.style.display = 'none'; 
+  });
+  document.getElementById('btnFecharUpload')?.addEventListener('click', () => { 
+    const m = document.getElementById('modalUpload');
+    if (m) m.style.display = 'none'; 
+  });
+
+  // Modal de Histórico Unificado
+  document.getElementById('btnVerHistorico')?.addEventListener('click', () => openHistoryModal('conf'));
   document.getElementById('btnCloseModalHist')?.addEventListener('click', () => { document.getElementById('modalHistorico').style.display = 'none'; });
   document.getElementById('btnFecharModalHist')?.addEventListener('click', () => { document.getElementById('modalHistorico').style.display = 'none'; });
   document.getElementById('btnExportarTodoHistorico')?.addEventListener('click', exportarTodoHistoricoCSV);
+  document.getElementById('btnExportarOcorrenciasCSV')?.addEventListener('click', exportarOcorrenciasCSV);
 
-  // Modal de Informações da Base
-  document.getElementById('btnInfoBase')?.addEventListener('click', () => {
+  // Chip de Informações da Base
+  document.getElementById('navBaseCount')?.addEventListener('click', () => {
     document.getElementById('modalBase').style.display = 'flex';
   });
   document.getElementById('btnCloseModalBase')?.addEventListener('click', () => {
