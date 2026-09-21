@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DHL Supply Chain - Conferência de Stage</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Navbar Clean DHL -->
+  <nav class="top-nav">
+    <div class="brand-group">
+      <img src="assets/dhl_logo.png" alt="DHL" class="dhl-logo" onerror="this.src='assets/dhl_red_logo.png'">
+      <div class="nav-divider"></div>
+      <div class="nav-titles">
+        <span class="nav-app-name">Conferência de Stage</span>
+        <span class="nav-app-sub">Auditoria & Validação de Expedição</span>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <button id="btnUploadModal" class="btn-icon-nav" title="Importar / Atualizar Planilha Excel (.xlsx)">
+        <span>📥</span> Atualizar Excel
+      </button>
+      <button id="btnVerHistorico" class="btn-icon-nav" title="Histórico de Auditorias e Conferências">
+        <span>📜</span> Histórico (<span id="navHistCount">0</span>)
+      </button>
+      <button id="btnInfoBase" class="btn-icon-nav" title="Informações da Base">
+        <span id="navBaseCount">📊 Base: Carregando...</span>
+      </button>
+      <button id="btnSoundToggle" class="btn-icon-nav" title="Alternar Som e Voz">
+        <span id="soundIcon">🔊</span> Som & Voz
+      </button>
+    </div>
+  </nav>
+
+  <!-- =========================================================
+       TELA 1: LOGIN DO EMBARQUE (CLEAN & DIRETO)
+       ========================================================= -->
+  <main id="viewLogin" class="login-screen">
+    <div class="clean-login-card">
+      <div class="clean-login-icon">📦</div>
+      <h2 class="clean-login-title">Iniciar Conferência</h2>
+      <p class="clean-login-desc">Bipe ou informe o número do Embarque para carregar a alocação do Stage.</p>
+
+      <div class="form-field">
+        <label for="inputEmbarque">Número do Embarque:</label>
+        <input type="text" id="inputEmbarque" class="input-clean" 
+               placeholder="Digite ou bipe o embarque..." 
+               autofocus autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="form-field" style="margin-bottom: 20px;">
+        <label for="inputOperador">Operador / Conferente:</label>
+        <input type="text" id="inputOperador" class="input-clean" style="font-size: 0.95rem; padding: 10px;" 
+               value="Operador DHL 01" placeholder="Seu nome">
+      </div>
+
+      <button id="btnLogin" class="btn-clean-primary">
+        Acessar Embarque [ENTER]
+      </button>
+
+      <div style="margin-top: 16px; text-align: center;">
+        <button id="btnQuickUpload" class="btn-link-action">
+          📁 Ou clique aqui para carregar novo arquivo Excel (.xlsx)
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- =========================================================
+       TELA 2: ÁREA DE BIPAGEM CONTÍNUA DE LPN
+       ========================================================= -->
+  <main id="viewScanner" class="main-wrapper" style="display: none;">
+
+    <!-- Summary KPI Card -->
+    <section class="shipment-header-card">
+      <div class="kpi-cluster">
+        <div class="kpi-unit">
+          <span class="caption">Embarque</span>
+          <span id="txtEmbarque" class="metric red">-</span>
+        </div>
+        <div class="kpi-unit">
+          <span class="caption">Stage</span>
+          <span id="txtStage" class="metric">-</span>
+        </div>
+        <div class="kpi-unit">
+          <span class="caption">Total Esperado</span>
+          <span id="txtTotalPaletes" class="metric">0</span>
+        </div>
+        <div class="kpi-unit">
+          <span class="caption">Conferidos</span>
+          <span id="txtConferidos" class="metric green">0</span>
+        </div>
+        <div class="kpi-unit">
+          <span class="caption">Pendentes</span>
+          <span id="txtPendentes" class="metric orange">0</span>
+        </div>
+        <div class="kpi-unit">
+          <span class="caption">Divergências</span>
+          <span id="txtDivergencias" class="metric red">0</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button id="btnReiniciarConferencia" class="btn-ghost-switch" title="Zerar bipagens deste embarque e recomeçar">
+          🔄 Reiniciar
+        </button>
+        <button id="btnTrocarEmbarque" class="btn-ghost-switch">
+          ↩ Trocar Embarque
+        </button>
+      </div>
+    </section>
+
+    <!-- Scanner Card Minimalista -->
+    <section id="scannerCard" class="scan-card">
+      <div class="scan-card-label">
+        <span>⚡ Bipagem de LPN</span>
+        <span class="badge-live-dot">
+          <span class="pulse-circle"></span> Leitura Automática
+        </span>
+      </div>
+
+      <input type="text" id="barcodeInput" class="scan-input-ultra" 
+             placeholder="Bipe a LPN do palete aqui..." 
+             autocomplete="off" spellcheck="false">
+
+      <!-- Feedback Banner Discreto -->
+      <div id="feedbackBanner" class="clean-feedback">
+        <span id="feedbackIcon" style="font-size: 1.1rem; line-height: 1;"></span>
+        <div id="feedbackText" style="flex: 1;"></div>
+      </div>
+    </section>
+
+    <!-- Progresso Slim -->
+    <section class="progress-card-slim">
+      <div class="progress-text-row">
+        <span>Progresso da Conferência</span>
+        <span id="progressPercent" style="color: var(--text-primary);">0% (0 de 0 paletes)</span>
+      </div>
+      <div class="progress-track-slim">
+        <div id="progressFill" class="progress-fill-slim"></div>
+      </div>
+    </section>
+
+    <!-- Timeline Feed de Paletes Bipados -->
+    <section class="timeline-card">
+      <div class="timeline-header">
+        <span>Histórico de Bipagens Físicas</span>
+        <span id="badgeHistCount" style="color: var(--text-muted); font-size: 0.75rem;">0 paletes</span>
+      </div>
+      <div id="listHistorico" class="timeline-body">
+        <div style="text-align: center; color: var(--text-muted); padding: 28px; font-size: 0.88rem;">
+          Nenhum palete bipado ainda. Aponte o leitor para as etiquetas de LPN no Stage.
+        </div>
+      </div>
+    </section>
+
+    <!-- Action Bar Inferior -->
+    <footer class="action-bar-bottom">
+      <div>
+        <button id="btnFinalizar" class="btn-finish-clean">
+          ✔ Concluir Conferência
+        </button>
+        <button id="btnExportarRelatorio" class="btn-secondary-clean">
+          Exportar CSV
+        </button>
+      </div>
+      <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">
+        DHL Supply Chain • Operational Excellence
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- =========================================================
+       MODAL 1: ATUALIZAR BASE / UPLOAD EXCEL (.XLSX)
+       ========================================================= -->
+  <div id="modalUpload" class="modal-backdrop">
+    <div class="modal-clean-box modal-lg">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Atualizar Base com Planilha Excel</h2>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Importe guias de conferência ou relatórios do WMS diretamente pelo navegador</span>
+        </div>
+        <button id="btnCloseModalUpload" class="btn-close-x">&times;</button>
+      </div>
+
+      <!-- Alerta de Segurança do Histórico -->
+      <div class="safe-history-notice">
+        <span style="font-size: 1.2rem;">🔒</span>
+        <div>
+          <b>Histórico 100% Protegido:</b> Suas conferências anteriores, bipagens já realizadas e auditorias salvas NÃO serão perdidas ao atualizar a base. Novos embarques são somados e atualizados com segurança.
+        </div>
+      </div>
+
+      <!-- Drag & Drop Zone -->
+      <div id="dropZone" class="upload-dropzone">
+        <div class="dropzone-icon">📥</div>
+        <div class="dropzone-title">Arraste e solte o arquivo Excel aqui</div>
+        <div class="dropzone-subtitle">Suporta <b>GUIA DE CONFERÊNCIA.xlsx</b> ou relatórios <b>adhc8-*.xlsx</b></div>
+        
+        <label for="excelFileInput" class="btn-file-select">
+          Selecionar Arquivo do Computador
+        </label>
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;">
+      </div>
+
+      <!-- Feedback de Processamento do Upload -->
+      <div id="uploadFeedback" style="display: none; margin-top: 16px;"></div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; border-top: 1px solid var(--border-light); padding-top: 14px;">
+        <div style="font-size: 0.8rem; color: var(--text-muted);">
+          Dica: Você também pode usar o <b>ATUALIZAR_BASE.bat</b> para atualizar via PowerShell.
+        </div>
+        <button id="btnFecharUpload" class="btn-secondary-clean" style="margin-left: 0;">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 2: HISTÓRICO DE AUDITORIAS E CONFERÊNCIAS
+       ========================================================= -->
+  <div id="modalHistorico" class="modal-backdrop">
+    <div class="modal-clean-box modal-lg">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Histórico de Auditorias e Conferências</h2>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Registro permanente de todas as conferências de stage efetuadas</span>
+        </div>
+        <button id="btnCloseModalHist" class="btn-close-x">&times;</button>
+      </div>
+
+      <!-- KPIs do Histórico -->
+      <div class="hist-kpi-bar">
+        <div class="hist-kpi-item">
+          <span class="kpi-label">Auditorias Salvas</span>
+          <span id="histTotalCount" class="kpi-val">0</span>
+        </div>
+        <div class="hist-kpi-item">
+          <span class="kpi-label">Paletes Auditados</span>
+          <span id="histTotalPaletes" class="kpi-val green">0</span>
+        </div>
+        <div class="hist-kpi-item">
+          <span class="kpi-label">Divergências Detectadas</span>
+          <span id="histTotalDivergencias" class="kpi-val red">0</span>
+        </div>
+      </div>
+
+      <!-- Tabela do Histórico -->
+      <div id="histTableContainer" class="hist-table-wrap">
+        <table class="clean-data-table">
+          <thead>
+            <tr>
+              <th>Data/Hora</th>
+              <th>Embarque</th>
+              <th>Operador</th>
+              <th>Stage</th>
+              <th>Progresso</th>
+              <th>Divergências</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="histTableBody">
+            <!-- Linhas inseridas via JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; border-top: 1px solid var(--border-light); padding-top: 14px;">
+        <button id="btnExportarTodoHistorico" class="btn-secondary-clean" style="margin-left: 0;">
+          📥 Exportar Histórico Completo (CSV)
+        </button>
+        <button id="btnFecharModalHist" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 20px;">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 3: INFORMAÇÕES DA BASE
+       ========================================================= -->
+  <div id="modalBase" class="modal-backdrop">
+    <div class="modal-clean-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+        <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">Base de Dados de Alocação</h2>
+        <button id="btnCloseModalBase" class="btn-close-x">&times;</button>
+      </div>
+      <div id="infoBaseDetails" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">
+        Carregando informações da base...
+      </div>
+      <div style="background: #F8FAFC; border: 1px solid var(--border-light); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+        <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Como atualizar a base:</div>
+        <div style="font-size: 0.88rem; color: var(--text-primary); margin-top: 6px; line-height: 1.5;">
+          <b>Opção 1 (Online/Direto):</b> Clique em <b>"Atualizar Excel"</b> na barra superior e selecione o arquivo.<br><br>
+          <b>Opção 2 (Automático Windows):</b> Salve o relatório na pasta <b>Downloads</b> e execute o <b>ATUALIZAR_BASE.bat</b>.
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end;">
+        <button id="btnFecharModalBase" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 18px;">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 4: CONCLUSÃO / RESUMO DA CONFERÊNCIA
+       ========================================================= -->
+  <div id="modalRelatorio" class="modal-backdrop">
+    <div class="modal-clean-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 12px;">
+        <h2 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">Resumo da Conferência</h2>
+        <button id="btnCloseModal" class="btn-close-x">&times;</button>
+      </div>
+      <div id="modalBody"></div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;">
+        <button id="btnPrintModal" class="btn-secondary-clean" style="margin-left: 0;">Imprimir</button>
+        <button id="btnOkModal" class="btn-finish-clean">Salvar & Concluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Flutuante -->
+  <div id="toastNotification" class="toast-box"></div>
+
+  <!-- Bibliotecas: SheetJS para leitura de Excel em tempo real no cliente -->
+  <script src="xlsx.full.min.js"></script>
+  <script src="stage_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
