@@ -19,13 +19,19 @@
       </div>
     </div>
     <div class="nav-actions">
+      <button id="btnToggleDashboard" class="btn-icon-nav btn-nav-dash" title="Mapa Visual de Stages e Gestão de Pátio" onclick="toggleDashboard()">
+        Mapa de Stages
+      </button>
+      <button id="btnToggleConsolidacao" class="btn-icon-nav btn-nav-consolidacao" title="Consolidação de Paletes por SKU+Lote" onclick="toggleConsolidacao()">
+        🔗 Consolidação
+      </button>
       <button id="btnUploadModal" class="btn-icon-nav" title="Importar / Atualizar Planilha Excel (.xlsx)" onclick="openUploadModal()">
         <span>📥</span> Atualizar Base
       </button>
       <button id="btnVerHistorico" class="btn-icon-nav" title="Histórico da Ferramenta" onclick="openHistoryModal('conf')">
         <span>📜</span> Histórico (<span id="navHistCount">0</span>)
       </button>
-      <button id="btnSoundToggle" class="btn-icon-nav" title="Alternar Som" onclick="toggleSound()">
+      <button id="btnSoundToggle" class="btn-icon-nav" title="Alternar Som">
         <span id="soundIcon">🔊</span> Som
       </button>
       <div id="navBaseCount" class="nav-status-chip" onclick="document.getElementById('modalBase').style.display='flex'" style="cursor: pointer;" title="Clique para ver detalhes da base">📊 Base: Carregando...</div>
@@ -71,36 +77,115 @@
        ========================================================= -->
   <main id="viewScanner" class="main-wrapper" style="display: none;">
 
-    <!-- Summary KPI Card -->
+    <!-- Summary KPI Card com Embarque em Gradiente e Gráfico Interativo de Conclusão -->
     <section class="shipment-header-card">
-      <div class="kpi-cluster">
-        <div class="kpi-unit">
-          <span class="caption">Embarque</span>
-          <span id="txtEmbarque" class="metric red">-</span>
+      <div class="shipment-header-left">
+        <!-- Destaque Colorido do Embarque com Gradiente -->
+        <div class="kpi-unit kpi-unit-embarque">
+          <span class="caption">Embarque Ativo</span>
+          <div class="embarque-badge-gradient" id="badgeEmbarqueGradient">
+            <span class="emb-badge-icon">📦</span>
+            <span id="txtEmbarque" class="metric-emb">-</span>
+          </div>
         </div>
-        <div class="kpi-unit">
-          <span class="caption">Stage</span>
-          <span id="txtStage" class="metric">-</span>
-        </div>
-        <div class="kpi-unit">
-          <span class="caption">Total Esperado</span>
-          <span id="txtTotalPaletes" class="metric">0</span>
-        </div>
-        <div class="kpi-unit">
-          <span class="caption">Conferidos</span>
-          <span id="txtConferidos" class="metric green">0</span>
-        </div>
-        <div class="kpi-unit">
-          <span class="caption">Pendentes</span>
-          <span id="txtPendentes" class="metric orange">0</span>
-        </div>
-        <div class="kpi-unit">
-          <span class="caption">Divergências</span>
-          <span id="txtDivergencias" class="metric red">0</span>
+
+        <div class="kpi-cluster">
+          <div class="kpi-unit">
+            <span class="caption">Stage Sistêmico</span>
+            <span id="txtStage" class="metric">-</span>
+          </div>
+          <div class="kpi-unit">
+            <span class="caption">Stage Físico Atual</span>
+            <span id="txtStageFisico" class="metric blue">-</span>
+          </div>
+          <div class="kpi-unit">
+            <span class="caption">Físico x Sistêmico</span>
+            <div id="txtStatusFisicoSistemico" class="badge-fisico-sistemico idle">
+              ⚪ Aguardando Leitura
+            </div>
+          </div>
+          <div class="kpi-unit">
+            <span class="caption">Total</span>
+            <span id="txtTotalPaletes" class="metric">0</span>
+          </div>
+          <div class="kpi-unit">
+            <span class="caption">Conferidos</span>
+            <span id="txtConferidos" class="metric green">0</span>
+          </div>
+          <div class="kpi-unit">
+            <span class="caption">Pendentes</span>
+            <span id="txtPendentes" class="metric orange">0</span>
+          </div>
+          <div class="kpi-unit">
+            <span class="caption">Divergências</span>
+            <span id="txtDivergencias" class="metric red">0</span>
+          </div>
         </div>
       </div>
 
-      <div style="display: flex; gap: 8px;">
+      <!-- Gráfico Interativo de Conclusão com Gradiente -->
+      <div class="header-completion-widget" id="headerCompletionWidget" onclick="toggleCompletionPopover(event)" title="Clique para ver o raio-x da conclusão do embarque">
+        <div class="radial-chart-box">
+          <svg class="radial-chart-svg" viewBox="0 0 84 84">
+            <defs>
+              <linearGradient id="headerCompletionGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#FFCC00" />
+                <stop offset="45%" stop-color="#FF7A00" />
+                <stop offset="100%" stop-color="#00A650" />
+              </linearGradient>
+            </defs>
+            <circle class="radial-track" cx="42" cy="42" r="36" fill="transparent" />
+            <circle id="radialProgressRing" class="radial-progress" cx="42" cy="42" r="36" fill="transparent"
+                    stroke="url(#headerCompletionGrad)" stroke-dasharray="226.2" stroke-dashoffset="226.2" />
+          </svg>
+          <div class="radial-center-content">
+            <span id="radialPercentText" class="radial-percent-num">0%</span>
+            <span class="radial-percent-lbl">CONCLUÍDO</span>
+          </div>
+        </div>
+
+        <div class="radial-meta-col">
+          <span class="radial-meta-title">Conclusão da Carga</span>
+          <span id="radialStatusLabel" class="radial-meta-status">AGUARDANDO</span>
+          <span id="radialCountsText" class="radial-meta-sub">0 de 0 paletes</span>
+          <span class="btn-open-popover">Raio-X Interativo ▾</span>
+        </div>
+
+        <!-- Popover Interativo Flutuante com Gradiente e Estatísticas -->
+        <div class="completion-popover" id="completionPopover">
+          <div class="popover-header">
+            <span>⚡ Raio-X de Conclusão</span>
+            <span id="popoverPercentBadge" class="popover-badge">0%</span>
+          </div>
+          <div class="popover-row">
+            <span>✔ Paletes Conferidos:</span>
+            <b id="popoverConf">0</b>
+          </div>
+          <div class="popover-row">
+            <span>⏳ Paletes Pendentes:</span>
+            <b id="popoverPend">0</b>
+          </div>
+          <div class="popover-row">
+            <span>📦 Total da Carga:</span>
+            <b id="popoverTotal">0</b>
+          </div>
+          <div class="popover-row">
+            <span>⚠️ Divergências:</span>
+            <b id="popoverDiv" style="color: #DC2626;">0</b>
+          </div>
+          <div class="popover-bar-wrap">
+            <div class="popover-bar-fill" id="popoverProgressFill" style="width: 0%;"></div>
+          </div>
+          <div class="popover-footer-tip">
+            Clique no gráfico para fechar
+          </div>
+        </div>
+      </div>
+
+      <div class="header-action-buttons">
+        <button id="btnScannerConsolidacao" class="btn-ghost-switch" style="color: #6D28D9; border-color: #DDD6FE; font-weight: 800;" onclick="toggleConsolidacao()" title="Ver cubagem e consolidação deste embarque">
+          🔗 Consolidar Carga
+        </button>
         <button id="btnReiniciarConferencia" class="btn-ghost-switch" title="Zerar bipagens deste embarque e recomeçar">
           🔄 Reiniciar
         </button>
@@ -110,17 +195,54 @@
       </div>
     </section>
 
+    <!-- Grid das Posições Físicas do Stage Ativo -->
+    <section id="stageSlotsCard" class="stage-slots-card">
+      <div class="slots-header">
+        <div class="slots-title-group">
+          <span class="slots-title">Alocação de Posições no Stage</span>
+          <span id="txtStageSlotsSubtitle" class="slots-sub">Sequenciamento contínuo de vagas</span>
+        </div>
+        <div class="slots-actions">
+          <div class="capacity-selector">
+            <span class="cap-label">Vagas:</span>
+            <button type="button" class="btn-cap-pill" data-cap="6" onclick="setStageCapacity(6)">6</button>
+            <button type="button" class="btn-cap-pill" data-cap="8" onclick="setStageCapacity(8)">8</button>
+            <button type="button" class="btn-cap-pill active" data-cap="10" onclick="setStageCapacity(10)">10</button>
+          </div>
+          <button id="btnInverterSentido" class="btn-slots-tool" onclick="toggleSlotDirection()" title="Alternar entre ordem crescente ou decrescente">
+            Inverter Sentido
+          </button>
+          <button id="btnPularVaga" class="btn-slots-tool" onclick="skipCurrentSlot()" title="Pular a vaga atual para a próxima">
+            Pular Vaga
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra de seleção rápida de Stages do Embarque -->
+      <div id="shipmentStagesSelector" class="shipment-stages-bar" style="display: none;"></div>
+
+      <div id="stageSlotsGrid" class="stage-slots-grid"></div>
+      <div class="slots-legend">
+        <span class="legend-item"><span class="swatch swatch-free"></span> <b>Cinza:</b> Livre</span>
+        <span class="legend-item"><span class="swatch swatch-target"></span> <b>Azul:</b> Bipando Agora</span>
+        <span class="legend-item"><span class="swatch swatch-done"></span> <b>Verde:</b> Conferido (✔ Bateu)</span>
+        <span class="legend-item"><span class="swatch swatch-waiting"></span> <b>Cinza Claro:</b> Na Fila</span>
+        <span class="legend-item"><span class="swatch swatch-partial"></span> <b>Laranja:</b> Parcial / Ramificação</span>
+        <span class="legend-item"><span class="swatch swatch-divergent"></span> <b>Vermelho:</b> Bloqueado / Divergência (✖)</span>
+      </div>
+    </section>
+
     <!-- Scanner Card Minimalista -->
     <section id="scannerCard" class="scan-card">
       <div class="scan-card-label">
-        <span>⚡ Bipagem de LPN</span>
+        <span>⚡ Bipagem de LPN ou Stage Físico</span>
         <span class="badge-live-dot">
           <span class="pulse-circle"></span> Leitura Automática
         </span>
       </div>
 
       <input type="text" id="barcodeInput" class="scan-input-ultra" 
-             placeholder="Bipe a LPN do palete aqui..." 
+             placeholder="Bipe a LPN do palete ou a placa do Stage (ex: ST008 ou SO008)..." 
              autocomplete="off" spellcheck="false">
 
       <!-- Feedback Banner Discreto -->
@@ -128,7 +250,35 @@
         <span id="feedbackIcon" style="font-size: 1.1rem; line-height: 1;"></span>
         <div id="feedbackText" style="flex: 1;"></div>
       </div>
+
     </section>
+
+    <!-- =========================================================
+         PAINEL DE AMOSTRAGEM 10% — Controle de Qualidade DHL
+         ========================================================= -->
+    <section id="amostragemCard" class="amostragem-card" style="display: none;">
+      <div class="amostragem-header" onclick="toggleAmostragemPanel()">
+        <div class="amostragem-title-group">
+          <span class="amostragem-icon">🎲</span>
+          <div>
+            <span class="amostragem-title">Amostragem de Controle — 10% da Carga</span>
+            <span id="amostragemStatus" class="amostragem-subtitle">Carregando amostra...</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div id="amostragemProgressPill" class="amostragem-pill">0/0</div>
+          <button class="amostragem-toggle-btn" id="btnAmostragemToggle">▼</button>
+        </div>
+      </div>
+      <div id="amostragemBody" class="amostragem-body">
+        <div id="amostragemList" class="amostragem-list"></div>
+        <div class="amostragem-footer">
+          <button class="btn-amostragem-nova" onclick="gerarNovaAmostragem()">🔀 Gerar Nova Amostra</button>
+          <span class="amostragem-footer-note">Paletes selecionados aleatoriamente • Mínimo 10% por embarque</span>
+        </div>
+      </div>
+    </section>
+
 
     <!-- Progresso Slim -->
     <section class="progress-card-slim">
@@ -141,15 +291,41 @@
       </div>
     </section>
 
-    <!-- Timeline Feed de Paletes Bipados -->
-    <section class="timeline-card">
-      <div class="timeline-header">
-        <span>Histórico de Bipagens Físicas</span>
-        <span id="badgeHistCount" style="color: var(--text-muted); font-size: 0.75rem;">0 paletes</span>
+    <!-- Painel Duplo: Distribuição dos Paletes no Stage & Histórico em Tempo Real -->
+    <section class="paletes-stage-card">
+      <div class="paletes-stage-tabs-bar">
+        <button id="tabBtnDistribuicao" class="tab-paletes-btn active" onclick="switchPaletesTab('distribuicao')">
+          📦 Distribuição nos Stages (<span id="tabCountTotalPaletes">0</span>)
+        </button>
+        <button id="tabBtnHistorico" class="tab-paletes-btn" onclick="switchPaletesTab('historico')">
+          📜 Histórico de Bipagens (<span id="tabCountHistorico">0</span>)
+        </button>
       </div>
-      <div id="listHistorico" class="timeline-body">
-        <div style="text-align: center; color: var(--text-muted); padding: 28px; font-size: 0.88rem;">
-          Nenhum palete bipado ainda. Aponte o leitor para as etiquetas de LPN no Stage.
+
+      <!-- TAB 1: Distribuição de Paletes no Stage (Mostra onde cada palete está alocado: ex SO01A, SO02B) -->
+      <div id="tabContentDistribuicao" class="paletes-tab-content active">
+        <div class="distribuicao-toolbar">
+          <div class="distribuicao-filters">
+            <button class="dist-filter-pill active" data-filter="todos" onclick="filterDistribuicao('todos')">Todos (<span id="distCountTodos">0</span>)</button>
+            <button class="dist-filter-pill" data-filter="pendentes" onclick="filterDistribuicao('pendentes')">⏳ Na Fila (<span id="distCountPend">0</span>)</button>
+            <button class="dist-filter-pill" data-filter="conferidos" onclick="filterDistribuicao('conferidos')">✔ Conferidos (<span id="distCountConf">0</span>)</button>
+            <button class="dist-filter-pill" data-filter="divergentes" onclick="filterDistribuicao('divergentes')">✖ Divergências (<span id="distCountDiv">0</span>)</button>
+          </div>
+          <span class="distribuicao-tip">📍 Localização de cada palete (ex: <b>SO01A</b>, <b>SO02B</b>)</span>
+        </div>
+        <div id="listDistribuicaoPaletes" class="distribuicao-table-wrap"></div>
+      </div>
+
+      <!-- TAB 2: Histórico de Bipagens Físicas (Feed cronológico com horários) -->
+      <div id="tabContentHistorico" class="paletes-tab-content" style="display: none;">
+        <div class="timeline-header" style="background: #FAFAFA; border-bottom: 1px solid var(--border-light);">
+          <span>Feed de Leituras do Leitor</span>
+          <span id="badgeHistCount" style="color: var(--text-muted); font-size: 0.75rem;">0 paletes</span>
+        </div>
+        <div id="listHistorico" class="timeline-body">
+          <div style="text-align: center; color: var(--text-muted); padding: 28px; font-size: 0.88rem;">
+            Nenhum palete bipado ainda. Aponte o leitor para as etiquetas de LPN no Stage.
+          </div>
         </div>
       </div>
     </section>
@@ -170,6 +346,194 @@
     </footer>
 
   </main>
+
+  <!-- =========================================================
+       TELA 3: DASHBOARD VISUAL DE STAGES (MAPA DO PÁTIO / EXPEDIÇÃO)
+       ========================================================= -->
+  <main id="viewDashboard" class="dashboard-screen" style="display: none;">
+
+    <header class="dash-header-card">
+      <div class="dash-title-row">
+        <div>
+          <h1 class="dash-main-title">Mapa de Stages e Pátio de Expedição</h1>
+          <p class="dash-main-sub">Gestão visual contínua de alocação de cargas, status e vagas físicas</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 18px;" onclick="closeDashboard()">
+            Voltar para Conferência
+          </button>
+        </div>
+      </div>
+
+      <!-- KPIs Globais do Pátio -->
+      <div class="dash-kpi-bar">
+        <div class="dash-kpi-item">
+          <span class="dash-kpi-label">Stages no Pátio</span>
+          <span id="dashKpiTotal" class="dash-kpi-val">67</span>
+        </div>
+        <div class="dash-kpi-item border-free">
+          <span class="dash-kpi-label">Livres</span>
+          <span id="dashKpiLivre" class="dash-kpi-val text-free">0</span>
+        </div>
+        <div class="dash-kpi-item border-waiting">
+          <span class="dash-kpi-label">Aguardando</span>
+          <span id="dashKpiAguardando" class="dash-kpi-val text-waiting">0</span>
+        </div>
+        <div class="dash-kpi-item border-partial">
+          <span class="dash-kpi-label">Parciais</span>
+          <span id="dashKpiParcial" class="dash-kpi-val text-partial">0</span>
+        </div>
+        <div class="dash-kpi-item border-done">
+          <span class="dash-kpi-label">Conferidos</span>
+          <span id="dashKpiConferido" class="dash-kpi-val text-done">0</span>
+        </div>
+        <div class="dash-kpi-item border-divergent">
+          <span class="dash-kpi-label">Divergências</span>
+          <span id="dashKpiDivergente" class="dash-kpi-val text-divergent">0</span>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros, Modos e Busca Rápida -->
+      <div class="dash-toolbar">
+        <div class="dash-filters">
+          <button class="dash-filter-btn active" data-filter="all" onclick="filterDashboard('all')">Todos</button>
+          <button class="dash-filter-btn" data-filter="conferido" onclick="filterDashboard('conferido')">Conferidos</button>
+          <button class="dash-filter-btn" data-filter="parcial" onclick="filterDashboard('parcial')">Parciais</button>
+          <button class="dash-filter-btn" data-filter="aguardando" onclick="filterDashboard('aguardando')">Aguardando</button>
+          <button class="dash-filter-btn" data-filter="livre" onclick="filterDashboard('livre')">Livres</button>
+          <button class="dash-filter-btn" data-filter="divergencia" onclick="filterDashboard('divergencia')">Com Divergência</button>
+        </div>
+        
+        <!-- Alternador de Visualização -->
+        <div class="dash-view-toggle">
+          <button id="btnModeLanes" class="btn-dash-mode active" onclick="setDashViewMode('lanes')">Desenho do Stage (Pátio)</button>
+          <button id="btnModeCards" class="btn-dash-mode" onclick="setDashViewMode('cards')">Cartões Resumo</button>
+        </div>
+
+        <div class="dash-search-wrap">
+          <input type="text" id="dashSearchInput" class="dash-search-input" placeholder="Buscar Stage ou Embarque..." oninput="handleDashSearch(this.value)">
+        </div>
+      </div>
+
+      <!-- Legenda com Mapa de Calor do Pátio (Identidade DHL e Segurança) -->
+      <div class="yard-legend-bar">
+        <span class="legend-item"><span class="swatch-solid swatch-solid-green"></span> <b>Verde:</b> Conferido (100% Validado ✔)</span>
+        <span class="legend-item"><span class="swatch-solid swatch-solid-gray-light"></span> <b>Cinza Claro:</b> Aguardando Conferência</span>
+        <span class="legend-item"><span class="swatch-solid swatch-solid-orange"></span> <b>Laranja:</b> Parcial / Ramificação</span>
+        <span class="legend-item"><span class="swatch-solid swatch-solid-red"></span> <b>Vermelho:</b> Bloqueado / Divergência (✖)</span>
+        <span class="legend-item"><span class="swatch-solid swatch-solid-blue"></span> <b>Azul:</b> Vaga Ativa (Bipando)</span>
+        <span class="legend-item"><span class="swatch-solid swatch-solid-purple"></span> <b>Roxo:</b> Delimitação do Embarque</span>
+        <span class="legend-item"><span class="swatch-solid swatch-solid-free"></span> <b>Branco Tracejado:</b> Stage Livre (Vazio)</span>
+      </div>
+    </header>
+
+    <!-- Container dos Stages Agrupados por Ruas/Faixas -->
+    <section id="dashStagesContainer" class="dash-stages-container"></section>
+
+  </main>
+
+  <!-- =========================================================
+       TELA 4: CONSOLIDAÇÃO DE EMBARQUE — SKU+Lote Grouping & Roteirização
+       ========================================================= -->
+  <main id="viewConsolidacao" class="consolidacao-screen" style="display: none;">
+
+    <header class="cons-header-card">
+      <div class="cons-title-row">
+        <div>
+          <h1 class="cons-main-title">🔗 Consolidação de Embarque</h1>
+          <p class="cons-main-sub">Agrupa paletes por SKU + Lote · Otimiza cubagem · Gera roteirização de stages</p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px; background: #F1F5F9; border: 1px solid var(--border-light); padding: 5px 12px; border-radius: 6px;">
+            <span style="font-size: 0.75rem; font-weight: 800; color: var(--text-secondary);">Embarque:</span>
+            <select id="consSelectEmbarque" style="background: transparent; border: none; font-weight: 800; font-size: 0.85rem; color: var(--text-primary); outline: none; cursor: pointer;" onchange="selecionarEmbarqueConsolidacao(this.value)">
+              <option value="">Carregando...</option>
+            </select>
+          </div>
+          <button class="btn-clean-primary" style="margin-top:0;width:auto;padding:8px 16px;" onclick="reprocessarConsolidacao()">
+            🔄 Recalcular
+          </button>
+          <button class="btn-secondary-clean" onclick="fecharConsolidacaoTela()">
+            ← Voltar
+          </button>
+        </div>
+      </div>
+
+      <!-- KPIs de Consolidação -->
+      <div class="cons-kpi-bar">
+        <div class="cons-kpi-item">
+          <span class="cons-kpi-label">Total de Paletes</span>
+          <span id="consKpiTotal" class="cons-kpi-val">0</span>
+        </div>
+        <div class="cons-kpi-item cons-kpi-alert">
+          <span class="cons-kpi-label">SKU+Lote Duplicados</span>
+          <span id="consKpiDuplicados" class="cons-kpi-val" style="color:#DC2626;">0</span>
+        </div>
+        <div class="cons-kpi-item cons-kpi-ok">
+          <span class="cons-kpi-label">Paletes Consolidáveis</span>
+          <span id="consKpiConsolidaveis" class="cons-kpi-val" style="color:#FF7A00;">0</span>
+        </div>
+        <div class="cons-kpi-item cons-kpi-gain">
+          <span class="cons-kpi-label">Economia de Espaço</span>
+          <span id="consKpiEconomia" class="cons-kpi-val" style="color:#00A650;">0 paletes</span>
+        </div>
+        <div class="cons-kpi-item">
+          <span class="cons-kpi-label">Embarque</span>
+          <span id="consKpiEmbarque" class="cons-kpi-val" style="font-size:1rem;">—</span>
+        </div>
+      </div>
+
+      <!-- Filtro Rápido -->
+      <div class="cons-toolbar">
+        <div class="cons-filters">
+          <button class="cons-filter-btn active" data-filter="todos" onclick="filtrarConsolidacao('todos')">Todos os Grupos</button>
+          <button class="cons-filter-btn" data-filter="duplicado" onclick="filtrarConsolidacao('duplicado')">⚠️ Duplicados (Consolidar)</button>
+          <button class="cons-filter-btn" data-filter="unico" onclick="filtrarConsolidacao('unico')">✔ Únicos (Sem Ação)</button>
+        </div>
+        <input type="text" id="consSearchInput" class="cons-search-input" placeholder="Filtrar por SKU, Lote ou Descrição..." oninput="filtrarConsolidacaoTexto(this.value)">
+      </div>
+    </header>
+
+    <!-- Roteirização Global -->
+    <section id="consRoteirizacaoGlobal" class="cons-roteirizacao-global" style="display:none;">
+      <div class="cons-route-title">
+        <span>📐 Roteirização Geral de Consolidação</span>
+        <button class="cons-route-toggle" onclick="toggleRoteirizacaoGlobal()">▼ Ver / Ocultar</button>
+      </div>
+      <div id="consRoteirizacaoBody" class="cons-route-body"></div>
+    </section>
+
+    <!-- Grid de Grupos -->
+    <section id="consGruposContainer" class="cons-grupos-container"></section>
+
+  </main>
+
+  <!-- =========================================================
+       MODAL 0: DETALHES E INSPEÇÃO DE VAGAS DO STAGE
+       ========================================================= -->
+  <div id="modalStageDetail" class="modal-backdrop" style="display: none;">
+    <div class="modal-clean-box modal-lg">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px;">
+        <div>
+          <h2 id="stageDetailTitle" style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin: 0;">Stage</h2>
+          <span id="stageDetailSub" style="font-size: 0.78rem; color: var(--text-muted);">Alocação e detalhamento físico de posições</span>
+        </div>
+        <button id="btnCloseModalStageDetail" class="btn-close-x" onclick="closeStageDetailModal()">&times;</button>
+      </div>
+
+      <div id="stageDetailBody"></div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; border-top: 1px solid var(--border-light); padding-top: 12px;">
+        <div id="stageDetailFooterInfo" style="font-size: 0.8rem; color: var(--text-muted);"></div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnConferirStageAgora" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 18px;">
+            Abrir Conferência Deste Stage
+          </button>
+          <button class="btn-secondary-clean" onclick="closeStageDetailModal()">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- =========================================================
        MODAL 1: ATUALIZAR BASE / UPLOAD EXCEL (.XLSX)
@@ -211,7 +575,10 @@
         <div style="font-size: 0.8rem; color: var(--text-muted);">
           Dica: Você também pode usar o <b>ATUALIZAR_BASE.bat</b> para atualizar via PowerShell.
         </div>
-        <button id="btnFecharUpload" class="btn-secondary-clean" style="margin-left: 0;">Fechar</button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnResetBaseDefault" class="btn-secondary-clean" onclick="limparBaseCustomizada()" style="margin-left: 0; color: #b91c1c; border-color: #fca5a5;">Restaurar Padrão</button>
+          <button id="btnFecharUpload" class="btn-secondary-clean" style="margin-left: 0;">Fechar</button>
+        </div>
       </div>
     </div>
   </div>
