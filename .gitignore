@@ -1,0 +1,29 @@
+*.tmp
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+
+# --- Segurança: nunca publicar credenciais ---
+.env
+*.env
+segredos*.ps1
+
+# --- Base duplicada (o site usa stage_data.js; o .json é só para uso local) ---
+stage_data.json
+
+# --- Resultados e scripts de exploração/teste (uso local, contêm dados internos) ---
+consolidacao_resultado.json
+ciclo_operacional_resultado.json
+catalogo_modelos_inteligentes.json
+modelos_info.json
+shared_state.json
+dump.txt
+testar_*.ps1
+descobrir_*.ps1
+extrair_catalogo.ps1
+extrair_todas_atividades.ps1
+consultar_atividades_operador.ps1
+cruzar_amostra.ps1
+rodar_ciclo_operacional.ps1
+.agents/

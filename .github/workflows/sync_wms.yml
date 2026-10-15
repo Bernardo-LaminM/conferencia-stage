@@ -1,0 +1,43 @@
+name: Sincronização Automática WMS (On-Time)
+
+on:
+  schedule:
+    # Executa automaticamente a cada 30 minutos nos turnos de operação (Seg a Sáb)
+    - cron: '*/30 9-23 * * 1-6'
+  workflow_dispatch: # Permite disparar com 1 clique diretamente na aba Actions do GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  sync-database:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar Código do Repositório
+        uses: actions/checkout@v4
+
+      - name: Conectar ao Banco ITATIAIA e Consultar View WMS
+        shell: pwsh
+        env:
+          DB_SERVER: "sqlwrhitatiaiaprod.b05aaf70da1f.database.windows.net"
+          DB_NAME: "ITATIAIA"
+          DB_USER: "paineloperacional.im@pg.com"
+          DB_PASS: ${{ secrets.DB_PASS }}
+        run: |
+          Write-Host "Iniciando consulta à view [itatiaia].[SHIPPING_PCKWRK_VIEW_SIMPLIFICADA]..."
+          & .\consultar_sql.ps1 -ServerInstance $env:DB_SERVER -Database $env:DB_NAME -User $env:DB_USER -Password $env:DB_PASS -OutputDir "."
+
+      - name: Publicar Base Atualizada no Repositório / GitHub Pages
+        shell: pwsh
+        run: |
+          git config --global user.name "DHL WMS Bot"
+          git config --global user.email "dhl-bot@users.noreply.github.com"
+          git add stage_data.js
+          $status = git status --porcelain
+          if ($status) {
+            git commit -m "Auto-sync WMS: Base atualizada em tempo real [skip ci]"
+            git push
+            Write-Host "Base atualizada e publicada no GitHub Pages com sucesso!"
+          } else {
+            Write-Host "Nenhuma alteracao detectada na base."
+          }

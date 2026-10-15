@@ -1,0 +1,170 @@
+/* Mapa de Stages — layout 2D/3D com embarques agrupando stages */
+.sm-root{--cw:44px;--ch:44px;--gap:0px;--lab:34px;--plate:28px;color:#1e293b;font-family:inherit}
+.sm-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:10px 4px 12px}
+.sm-seg{display:inline-flex;border:1.5px solid #cbd5e1;border-radius:8px;overflow:hidden;background:#fff}
+.sm-seg button{border:0;background:transparent;padding:7px 20px;font-weight:800;font-size:.85rem;cursor:pointer;color:#475569}
+.sm-seg button.on{background:#D40511;color:#fff}
+.sm-rng{display:flex;align-items:center;gap:8px;font-size:.78rem;font-weight:700;color:#475569}
+.sm-rng input{width:110px;accent-color:#D40511}
+.sm-rng.off{opacity:.38;pointer-events:none}
+.sm-leg{display:flex;flex-wrap:wrap;gap:12px;margin-left:auto;font-size:.75rem;color:#475569}
+.sm-leg span{display:inline-flex;align-items:center;gap:5px}
+.sm-leg i{width:12px;height:12px;border-radius:3px;background:var(--c)}
+.sm-demo{font-size:.72rem;font-weight:800;color:#92400e;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:3px 8px}
+
+.sm-embs{display:flex;flex-wrap:wrap;gap:8px;padding:0 4px 12px}
+.sm-chip{position:relative;display:inline-flex;align-items:baseline;gap:8px;padding:6px 12px 10px;border:1.5px solid var(--hc);border-radius:8px;background:#fff;color:#1e293b;font-size:.8rem;cursor:pointer}
+.sm-chip b{font-weight:800}
+.sm-chip span{font-size:.72rem;color:#64748b;font-variant-numeric:tabular-nums}
+.sm-chip em{position:absolute;left:8px;bottom:4px;height:3px;border-radius:2px;background:var(--hc)}
+.sm-chip.on{background:var(--hc);color:#fff}
+.sm-chip.on span{color:rgba(255,255,255,.85)}
+.sm-chip.on em{background:#fff}
+
+/* Cena */
+.sm-viewport{position:relative;overflow-x:auto;overflow-y:hidden;perspective:14000px;perspective-origin:50% 0}
+.sm-floor{--h:0px;position:relative;width:max-content;padding:24px 30px 40px 16px;border-radius:16px;transform-origin:0 0;transform-style:preserve-3d;
+  transform:translate(var(--tx,0px),var(--ty,0px)) rotateX(var(--tilt,0deg)) rotateZ(var(--yaw,0deg)) scale(var(--z,1));
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 2px,transparent 2px 46px),linear-gradient(180deg,#d9dde2,#c4c9d0);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),0 28px 60px -12px rgba(15,23,42,.35)}
+.sm-floor[data-mode="3d"]{--h:16px}
+.sm-floor *{transform-style:preserve-3d}
+
+.sm-band{display:grid;grid-template-columns:34px auto;column-gap:10px;margin-bottom:46px}
+.sm-band:last-child{margin-bottom:0}
+.sm-bname{height:calc(var(--lab) + var(--plate) + 6px);display:flex;align-items:flex-end;justify-content:flex-end;padding-bottom:6px;font-size:.72rem;font-weight:800;color:#64748b;white-space:nowrap}
+.sm-ruler span{display:block;height:var(--ch);line-height:var(--ch);text-align:right;font-size:.85rem;font-weight:800;color:#64748b}
+.sm-cols{position:relative;display:grid;grid-template-columns:repeat(var(--n),var(--cw));gap:var(--gap);padding-top:var(--lab)}
+
+.sm-plate{display:block;width:100%;height:var(--plate);margin:0 0 6px;padding:0;border:0;border-radius:4px;background:#FFCC00;color:#D40511;font:900 .66rem/var(--plate) inherit;letter-spacing:-.02em;text-align:center;cursor:pointer;box-shadow:inset 0 -3px 0 #D40511;transform:translateZ(1px)}
+.sm-plate:hover{background:#ffd633}
+.sm-plate:focus-visible,.sm-hlabel:focus-visible,.sm-chip:focus-visible{outline:3px solid #2F6BFF;outline-offset:2px}
+.sm-slots{border-inline:1px solid rgba(255,255,255,.85);background:rgba(255,255,255,.14)}
+.sm-slot{position:relative;height:var(--ch);border-bottom:1.5px solid rgba(255,255,255,.6)}
+.sm-slot:last-child{border-bottom:2.5px solid rgba(255,255,255,.85)}
+
+/* Palete (caixa: 2D = plano, 3D = extrudado) */
+.sm-pal{position:absolute;inset:1px;border-radius:2px;transform:translateZ(var(--h));
+  background:linear-gradient(145deg,color-mix(in srgb,var(--c) 82%,#fff),var(--c));box-shadow:inset 0 0 0 1px rgba(255,255,255,.28),0 1px 2px rgba(15,23,42,.35)}
+.sm-pal::before,.sm-pal::after{content:"";position:absolute;background:var(--cd)}
+.sm-pal::before{left:0;top:100%;width:100%;height:var(--h);transform-origin:top;transform:rotateX(-90deg)}
+.sm-pal::after{left:100%;top:0;width:var(--h);height:100%;transform-origin:left;transform:rotateY(90deg);background:color-mix(in srgb,var(--cd) 85%,#000)}
+.sm-pal b{position:absolute;inset:0;display:grid;place-items:center;font-size:.78rem;color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.35)}
+.st-conferido{--c:#22a861;--cd:#14713f}.st-aguardando{--c:#b4bdc9;--cd:#8794a5}
+.st-divergencia{--c:#e0443f;--cd:#a02522}.st-ativo{--c:#3b73ff;--cd:#1f4bc4;animation:sm-pulse 1.6s ease-in-out infinite}
+.sm-leg .st-livre{--c:#e5e7eb}
+@keyframes sm-pulse{0%,100%{box-shadow:0 0 0 0 rgba(59,115,255,.65)}50%{box-shadow:0 0 0 6px rgba(59,115,255,0)}}
+@media (prefers-reduced-motion:reduce){.st-ativo{animation:none}}
+
+/* Embarque: contorno que abraça os stages */
+.sm-hull{position:absolute;pointer-events:none;box-sizing:border-box;border:2.5px solid var(--hc);border-radius:12px;background:color-mix(in srgb,var(--hc) 9%,transparent);transform:translateZ(2px)}
+.sm-hull::after{content:"";position:absolute;left:-2.5px;right:-2.5px;top:100%;height:calc(var(--h)*1.8);transform-origin:top;transform:rotateX(90deg);background:linear-gradient(180deg,color-mix(in srgb,var(--hc) 45%,transparent),transparent)}
+.sm-hlabel{pointer-events:auto;position:absolute;left:12px;bottom:100%;display:flex;align-items:baseline;gap:10px;height:26px;padding:0 12px;border:0;border-radius:8px 8px 0 0;background:var(--hc);color:#fff;font:800 .8rem/26px inherit;white-space:nowrap;cursor:pointer;transform-origin:50% 100%;transform:rotateX(calc(var(--tilt,0deg)*-1))}
+.sm-hlabel span{font-weight:600;font-size:.72rem;opacity:.9;font-variant-numeric:tabular-nums}
+
+/* Esmaecer o que não combina com filtro/busca/foco */
+.sm-stage.is-dim .sm-pal{--c:#d3d9e0;--cd:#bcc4ce;animation:none}
+.sm-stage.is-dim .sm-pal b{display:none}
+.sm-stage.is-dim .sm-plate{background:#e2e8f0;color:#94a3b8;box-shadow:inset 0 -3px 0 #cbd5e1}
+.sm-hull.is-dim{--hc:#aab4c2}
+
+.sm-tip{position:fixed;z-index:9999;display:none;max-width:260px;padding:8px 10px;border-radius:8px;background:#0f172a;color:#fff;font-size:.78rem;line-height:1.5;pointer-events:none;box-shadow:0 8px 24px rgba(15,23,42,.35)}
+.sm-tip b{font-weight:800}
+.sm-tip small{color:#94a3b8}
+
+/* Status da CARGA (embarque): parcial é da carga, não do palete */
+.s-conferido{--sc:#22a861;--sct:#15803d}.s-parcial{--sc:#f39a2b;--sct:#b45309}.s-aguardando{--sc:#94a3b8;--sct:#475569}
+.sm-dot{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;background:var(--sc);align-self:center;box-shadow:0 0 0 1.5px #fff}
+.sm-pill{font-style:normal;font-weight:800;font-size:.68rem;padding:1px 8px;border-radius:999px;background:#fff;color:var(--sct)}
+.sm-sep{font-weight:800;color:#1e293b;margin-left:6px}
+.sm-hlabel .sm-dot{margin-right:-4px}
+.sm-chip .sm-dot{box-shadow:none}
+.sm-chip.on .sm-dot{box-shadow:0 0 0 1.5px #fff}
+
+/* Roteirização (consolidação): origem → destino */
+.sm-rlist{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 4px 12px}
+.sm-rtitle{font-weight:800;font-size:.8rem;margin-right:6px}
+.sm-rchip{display:inline-flex;align-items:center;gap:7px;padding:4px 10px 4px 5px;border:1.5px solid #cbd5e1;border-radius:999px;background:#fff;font-size:.76rem;font-weight:700;color:#1e293b;cursor:pointer;font-variant-numeric:tabular-nums}
+.sm-rchip em{font-style:normal;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#0f172a;color:#fff;font-size:.66rem;font-weight:800}
+.sm-rchip small{color:#64748b;font-weight:600}
+.sm-rchip.on{border-color:#0f172a;background:#0f172a;color:#fff}.sm-rchip.on em{background:#fff;color:#0f172a}.sm-rchip.on small{color:#cbd5e1}
+.sm-routes{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;transform:translateZ(calc(var(--h) + 3px))}
+.sm-routes g.dim{opacity:.18}
+
+/* Stage Bloqueado Operacionalmente — Fica Vermelho (#DC2626) */
+.sm-plate.st-blocked{background:#DC2626 !important;color:#FFFFFF !important;box-shadow:inset 0 -3px 0 #991B1B !important;font-weight:900}
+.sm-plate.st-blocked:hover{background:#B91C1C !important}
+.sm-stage.is-blocked .sm-slots{background:rgba(220,38,38,.22) !important;border-inline:2px solid #DC2626 !important;box-shadow:inset 0 0 8px rgba(220,38,38,.3)}
+.sm-stage.is-blocked .sm-slot{background:rgba(220,38,38,.12);border-bottom-color:rgba(220,38,38,.4)}
+.sm-stage.is-blocked .sm-pal{--c:#DC2626 !important;--cd:#991B1B !important}
+
+/* Planejador de consolidação */
+.sm-plan{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:0 4px 12px;font-size:.8rem;font-weight:700;color:#475569}
+.sm-plan label{display:inline-flex;align-items:center;gap:6px}
+.sm-plan select{font:inherit;padding:5px 8px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#1e293b}
+.sm-plan input[type=checkbox]{accent-color:#D40511;width:15px;height:15px}
+.sm-kpis{display:flex;flex-wrap:wrap;gap:10px;padding:0 4px 12px}
+.sm-kpis div{min-width:110px;padding:8px 14px;border:1.5px solid #e2e8f0;border-radius:10px;background:#fff;display:flex;flex-direction:column}
+.sm-kpis b{font-size:1.25rem;font-weight:800;color:#0f172a;font-variant-numeric:tabular-nums}
+.sm-kpis span{font-size:.72rem;color:#64748b;font-weight:600}
+.sm-kpis .g{border-color:#86d9ae;background:#f0fdf6}.sm-kpis .g b{color:#15803d}
+.sm-rtitle small{font-weight:600;color:#64748b}
+.sm-rchip.mv{border-style:dashed}
+.sm-fill{position:absolute;left:0;bottom:0;height:5px;display:block;background:rgba(255,255,255,.95);text-decoration:none;box-shadow:0 0 0 1px rgba(15,23,42,.3)}
+.sm-fill.part{background:#fde047}
+.sm-pal.chg{box-shadow:inset 0 0 0 2px #fff,0 0 0 2px #0f172a}
+.sm-plate.free{background:#22a861;color:#fff;box-shadow:inset 0 -3px 0 #14713f}
+.sm-routes g.mv path{stroke-dasharray:6 4}
+
+.sm-stage.is-dim .sm-plate.free,.sm-plate.free{background:#22a861;color:#fff;box-shadow:inset 0 -3px 0 #14713f}
+
+/* Zona (como no CAD): faixa com o nome da área acima dos stages */
+.sm-zones{position:relative;height:26px;margin:0 0 16px 44px;transform:translateZ(1px)}
+.sm-zone{position:absolute;top:0;height:26px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 12px;border:2px solid #fff;border-radius:6px;background:#1e293b;color:#fff;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.sm-zone b{font-weight:800}
+.sm-zone span{font-weight:600;opacity:.7;letter-spacing:.02em}
+
+/* Numeração começando no lado direito: régua A–J e rótulo da zona ficam junto do SO01 */
+.sm-band.rev{grid-template-columns:auto 34px}
+.sm-band.rev .sm-ruler{order:2}
+.sm-band.rev .sm-ruler span{text-align:left}
+.sm-zones.rev{margin-left:0}
+.sm-zone.rev{justify-content:flex-end}
+
+/* ===== Realismo 3D ===== */
+@property --h{syntax:'<length>';inherits:true;initial-value:0px}
+@property --b{syntax:'<length>';inherits:true;initial-value:0px}
+.sm-floor{--b:0px;transition:--h .45s ease,--b .45s ease;
+  background:
+    radial-gradient(rgba(15,23,42,.05) 1px,transparent 1.4px) 0 0/7px 7px,
+    repeating-linear-gradient(0deg,rgba(15,23,42,.07) 0 1px,transparent 1px 132px),
+    repeating-linear-gradient(90deg,rgba(15,23,42,.07) 0 1px,transparent 1px 132px),
+    linear-gradient(180deg,#d9dde2,#c4c9d0)}
+.sm-floor[data-mode="3d"]{--h:22px;--b:3px}
+
+/* carga: caixas de papelão com filme stretch; o status fica na face de cima e numa faixa na frente */
+.sm-pal::before{height:calc(var(--h) - var(--b));
+  background:linear-gradient(var(--cd),var(--cd)) top/100% 3px no-repeat,
+    linear-gradient(100deg,rgba(255,255,255,.38),rgba(255,255,255,0) 45%,rgba(255,255,255,.22)),
+    repeating-linear-gradient(180deg,#cfa86f 0 6px,#b78d55 6px 7px)}
+.sm-pal::after{width:calc(var(--h) - var(--b));left:100%;
+  background:linear-gradient(var(--cd),var(--cd)) top/100% 3px no-repeat,
+    linear-gradient(100deg,rgba(255,255,255,.18),rgba(0,0,0,.28)),
+    repeating-linear-gradient(180deg,#a98350 0 6px,#8f6c3f 6px 7px)}
+.sm-stage.is-dim .sm-pal::before,.sm-stage.is-dim .sm-pal::after{filter:grayscale(1) brightness(1.12)}
+
+/* base (palete azul) e sombra no chão */
+.sm-slot.has::after{content:"";position:absolute;left:3px;right:3px;top:calc(100% - 1px);height:var(--b);transform-origin:top;transform:rotateX(90deg);
+  background:linear-gradient(90deg,#2f64b0 0 20%,#0b1220 20% 40%,#2f64b0 40% 60%,#0b1220 60% 80%,#2f64b0 80%)}
+.sm-slot.has::before{content:"";position:absolute;inset:4px 2px 2px 4px;border-radius:3px;transform:translateZ(.5px);box-shadow:3px 4px 7px 2px rgba(15,23,42,.38)}
+.sm-floor[data-mode="2d"] .sm-slot.has::before{display:none}
+
+/* faixa de segurança na frente dos stages (como o amarelo do CAD/piso) */
+.sm-cols::after{content:"";position:absolute;left:0;right:0;top:calc(100% + 16px);height:6px;border-radius:2px;transform:translateZ(1px);
+  background:repeating-linear-gradient(135deg,#FFCC00 0 9px,#1e293b 9px 18px)}
+
+/* câmera */
+.sm-viewport{cursor:grab;user-select:none;-webkit-user-select:none}
+.sm-viewport.drag{cursor:grabbing}
+.sm-hint{font-size:.7rem;color:#94a3b8;font-weight:600}
+[data-3d].off{opacity:.38;pointer-events:none}
