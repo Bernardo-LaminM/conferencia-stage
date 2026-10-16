@@ -1,6 +1,6 @@
 window.EMBEDDED_STAGE_DATA = {
-  "origem": "API_SharePoint_CSV",
-  "atualizado_em": "2026-10-16T17:26:15.652Z",
+  "origem": "RPA_SharePoint_AutoSync",
+  "atualizado_em": "2026-10-16T17:53:59.546Z",
   "total_embarques": 241,
   "total_paletes": 16395,
   "total_pecas": 621427,
