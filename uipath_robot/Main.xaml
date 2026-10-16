@@ -1,0 +1,104 @@
+<Activity mc:Ignorable="sap sap2010" x:Class="Main" mva:VisualBasic.Settings="{x:Null}" sap:VirtualizedContainerService.HintSize="850,1200" sap2010:WorkflowViewState.IdRef="ActivityBuilder_1" xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:mva="clr-namespace:Microsoft.VisualBasic.Activities;assembly=System.Activities" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:sap="http://schemas.microsoft.com/netfx/2009/xaml/activities/presentation" xmlns:sap2010="http://schemas.microsoft.com/netfx/2010/xaml/activities/presentation" xmlns:scg="clr-namespace:System.Collections.Generic;assembly=mscorlib" xmlns:ui="http://schemas.uipath.com/workflow/activities" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <TextExpression.NamespacesForImplementation>
+    <scg:List x:TypeArguments="x:String" Capacity="42">
+      <x:String>System.Activities</x:String>
+      <x:String>System.Activities.Statements</x:String>
+      <x:String>System.Activities.Expressions</x:String>
+      <x:String>System.Activities.Validation</x:String>
+      <x:String>System.Activities.XamlIntegration</x:String>
+      <x:String>Microsoft.VisualBasic</x:String>
+      <x:String>Microsoft.VisualBasic.Activities</x:String>
+      <x:String>System</x:String>
+      <x:String>System.Collections</x:String>
+      <x:String>System.Collections.Generic</x:String>
+      <x:String>System.Data</x:String>
+      <x:String>System.Diagnostics</x:String>
+      <x:String>System.IO</x:String>
+      <x:String>System.Linq</x:String>
+      <x:String>System.Net.Mail</x:String>
+      <x:String>System.Xml</x:String>
+      <x:String>System.Xml.Linq</x:String>
+      <x:String>UiPath.Core</x:String>
+      <x:String>UiPath.Core.Activities</x:String>
+      <x:String>System.Windows.Markup</x:String>
+      <x:String>System.Collections.ObjectModel</x:String>
+      <x:String>System.Runtime.Serialization</x:String>
+      <x:String>System.Activities.DynamicUpdate</x:String>
+    </scg:List>
+  </TextExpression.NamespacesForImplementation>
+  <TextExpression.ReferencesForImplementation>
+    <scg:List x:TypeArguments="AssemblyReference" Capacity="32">
+      <AssemblyReference>System.Activities</AssemblyReference>
+      <AssemblyReference>Microsoft.VisualBasic</AssemblyReference>
+      <AssemblyReference>mscorlib</AssemblyReference>
+      <AssemblyReference>System.Data</AssemblyReference>
+      <AssemblyReference>System</AssemblyReference>
+      <AssemblyReference>System.Drawing</AssemblyReference>
+      <AssemblyReference>System.Core</AssemblyReference>
+      <AssemblyReference>System.Xml</AssemblyReference>
+      <AssemblyReference>System.Xml.Linq</AssemblyReference>
+      <AssemblyReference>PresentationFramework</AssemblyReference>
+      <AssemblyReference>WindowsBase</AssemblyReference>
+      <AssemblyReference>PresentationCore</AssemblyReference>
+      <AssemblyReference>System.Xaml</AssemblyReference>
+      <AssemblyReference>UiPath.System.Activities</AssemblyReference>
+      <AssemblyReference>UiPath.UiAutomation.Activities</AssemblyReference>
+      <AssemblyReference>System.Runtime.Serialization</AssemblyReference>
+    </scg:List>
+  </TextExpression.ReferencesForImplementation>
+  <Sequence DisplayName="DHL_Conferencia_Stage_Sync - Main" sap:VirtualizedContainerService.HintSize="550,1050" sap2010:WorkflowViewState.IdRef="Sequence_1">
+    <Sequence.Variables>
+      <Variable x:TypeArguments="x:String" Default="C:\Users\blaminma\Downloads\Conferencia_Stage_Oficial" Name="strProjectPath" />
+      <Variable x:TypeArguments="x:Int32" Name="intExitCode" />
+    </Sequence.Variables>
+    <sap:WorkflowViewStateService.ViewState>
+      <scg:Dictionary x:TypeArguments="x:String, x:Object">
+        <x:Boolean x:Key="IsExpanded">True</x:Boolean>
+      </scg:Dictionary>
+    </sap:WorkflowViewStateService.ViewState>
+
+    <!-- Log de Auditoria Inicial (UiPath Orchestrator) -->
+    <ui:LogMessage DisplayName="Log Message - Inicio" sap:VirtualizedContainerService.HintSize="508,91" sap2010:WorkflowViewState.IdRef="LogMessage_1" Level="Info" Message="[&quot;[DHL RPA] Iniciando ciclo de sincronizacao de stages (Gateway MI-ITATIAIA-PROD-FULL-PaaS-ADHOC)...&quot;]" />
+
+    <TryCatch DisplayName="Try Catch - Processamento Seguro" sap:VirtualizedContainerService.HintSize="508,700" sap2010:WorkflowViewState.IdRef="TryCatch_1">
+      <TryCatch.Try>
+        <Sequence DisplayName="Executar Sincronizacao e Publicacao" sap:VirtualizedContainerService.HintSize="470,450" sap2010:WorkflowViewState.IdRef="Sequence_2">
+          <sap:WorkflowViewStateService.ViewState>
+            <scg:Dictionary x:TypeArguments="x:String, x:Object">
+              <x:Boolean x:Key="IsExpanded">True</x:Boolean>
+            </scg:Dictionary>
+          </sap:WorkflowViewStateService.ViewState>
+
+          <!-- Executa o processador corporativo da base -->
+          <ui:LogMessage DisplayName="Log Message - Extraindo Dados" sap:VirtualizedContainerService.HintSize="428,91" sap2010:WorkflowViewState.IdRef="LogMessage_2" Level="Info" Message="[&quot;[DHL RPA] Lendo dados corporativos do Gateway e gerando base para os tablets...&quot;]" />
+
+          <!-- Processa os dados de stages e publica no GitHub Pages -->
+          <ui:InvokePowerShell x:TypeArguments="x:String" ContinueOnError="False" CommandText="&amp; '.\atualizar_powerbi.ps1' -OutputDir '.'" DisplayName="Invoke PowerShell - Sync Gateway/PowerBI" sap:VirtualizedContainerService.HintSize="428,60" sap2010:WorkflowViewState.IdRef="InvokePowerShell_1" WorkingDirectory="[strProjectPath]" />
+
+          <!-- Publica a base atualizada no GitHub Pages via Git -->
+          <ui:InvokePowerShell x:TypeArguments="x:String" ContinueOnError="True" CommandText="&amp; 'C:\Users\blaminma\AppData\Local\Programs\Git\cmd\git.exe' add stage_data.js; &amp; 'C:\Users\blaminma\AppData\Local\Programs\Git\cmd\git.exe' commit -m 'UiPath RPA: Base atualizada automaticamente via Gateway [skip ci]'; &amp; 'C:\Users\blaminma\AppData\Local\Programs\Git\cmd\git.exe' push origin main" DisplayName="Invoke PowerShell - Publicar Nuvem" sap:VirtualizedContainerService.HintSize="428,60" sap2010:WorkflowViewState.IdRef="InvokePowerShell_2" WorkingDirectory="[strProjectPath]" />
+
+          <!-- Log de Sucesso no Orchestrator -->
+          <ui:LogMessage DisplayName="Log Message - Concluido" sap:VirtualizedContainerService.HintSize="428,91" sap2010:WorkflowViewState.IdRef="LogMessage_3" Level="Info" Message="[&quot;[DHL RPA] SUCESSO: Base de stages sincronizada e publicada no GitHub Pages para os tablets.&quot;]" />
+        </Sequence>
+      </TryCatch.Try>
+      <TryCatch.Catches>
+        <Catch x:TypeArguments="s:Exception" sap:VirtualizedContainerService.HintSize="474,21" sap2010:WorkflowViewState.IdRef="Catch`1_1">
+          <sap:WorkflowViewStateService.ViewState>
+            <scg:Dictionary x:TypeArguments="x:String, x:Object">
+              <x:Boolean x:Key="IsExpanded">False</x:Boolean>
+              <x:Boolean x:Key="IsPinned">False</x:Boolean>
+            </scg:Dictionary>
+          </sap:WorkflowViewStateService.ViewState>
+          <ActivityAction x:TypeArguments="s:Exception">
+            <ActivityAction.Argument>
+              <DelegateInArgument x:TypeArguments="s:Exception" Name="exception" />
+            </ActivityAction.Argument>
+            <!-- Log de Falha Estruturado no Orchestrator -->
+            <ui:LogMessage DisplayName="Log Message - Falha" sap:VirtualizedContainerService.HintSize="334,91" sap2010:WorkflowViewState.IdRef="LogMessage_4" Level="Error" Message="[&quot;[DHL RPA] ERRO na sincronizacao: &quot; + exception.Message]" />
+          </ActivityAction>
+        </Catch>
+      </TryCatch.Catches>
+    </TryCatch>
+  </Sequence>
+</Activity>
