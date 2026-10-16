@@ -141,8 +141,26 @@ try {
             continue
         }
 
-        # API para Sincronização Automática Live do Power BI REST API (AD HOC 80)
-        if ($reqUrl -eq "/api/sync-powerbi") {
+        # API para Sincronização Automática Live do SharePoint / Power BI (AD HOC 80)
+        if ($reqUrl -eq "/api/sync-sharepoint" -or $reqUrl -eq "/api/sync-powerbi") {
+            $sharepointCsv = "C:\Users\blaminma\Procter and Gamble\Servidor DHL - Confêrencia Digital\ADHOC_80.csv"
+            $spNodeScript = Join-Path $Path "atualizar_sharepoint.js"
+            if ((Test-Path $sharepointCsv) -and (Test-Path $spNodeScript)) {
+                try {
+                    & node $spNodeScript
+                    $jsonStr = '{"ok":true,"source":"SharePoint PowerAutomate","message":"Base de dados atualizada automaticamente do SharePoint (ADHOC_80.csv) com sucesso!"}'
+                    $respMsg = [System.Text.Encoding]::UTF8.GetBytes($jsonStr)
+                    $response.StatusCode = 200
+                    $response.ContentType = "application/json; charset=utf-8"
+                    $response.ContentLength64 = $respMsg.Length
+                    $response.OutputStream.Write($respMsg, 0, $respMsg.Length)
+                    $response.OutputStream.Close()
+                    continue
+                } catch {
+                    # Se falhar pelo node, segue para atualizar_powerbi.ps1
+                }
+            }
+
             $pbiScript = Join-Path $Path "atualizar_powerbi.ps1"
             if (Test-Path $pbiScript) {
                 try {

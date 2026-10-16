@@ -1,0 +1,29 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx/client-side-web-part-manifest.schema.json",
+  "id": "e4b373fa-829d-4721-a08e-17cf70e45690",
+  "alias": "ConferenciaStageWebPart",
+  "componentType": "WebPart",
+  "version": "1.0.0",
+  "manifestVersion": 2,
+  "requiresCustomScript": false,
+  "supportedHosts": [
+    "SharePointWebPart",
+    "TeamsPersonalApp",
+    "TeamsTab",
+    "SharePointFullPage"
+  ],
+  "supportsFullBleed": true,
+  "preconfiguredEntries": [
+    {
+      "groupId": "5c023432-0303-4bf4-a95b-d020e97356fe",
+      "group": { "default": "Under Development" },
+      "title": { "default": "DHL Conferência de Stage (Full Screen)" },
+      "description": { "default": "Sistema Operacional de Conferência de Stage e Alocação P&G Itatiaia (Full Screen Tailwind para Tablets)" },
+      "officeFabricIconFontName": "DeliveryTruck",
+      "properties": {
+        "description": "DHL Conferência de Stage",
+        "fullBleedMode": true
+      }
+    }
+  ]
+}

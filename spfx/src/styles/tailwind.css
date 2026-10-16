@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset local isolado apenas dentro de .elb-container */
+.elb-container {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.elb-container *,
+.elb-container *::before,
+.elb-container *::after {
+  box-sizing: inherit;
+}

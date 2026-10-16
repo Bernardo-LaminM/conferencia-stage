@@ -1,0 +1,40 @@
+name: Sincronização Automática Power BI Live (AD HOC 80)
+
+on:
+  schedule:
+    # Executa automaticamente a cada 30 minutos nos horários de expedição do CD
+    - cron: '*/30 8-23 * * *'
+  workflow_dispatch: # Permite disparar com 1 clique direto na aba Actions do GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  sync-powerbi-live:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar Código do Repositório
+        uses: actions/checkout@v4
+
+      - name: Executar Consulta DAX Live no Power BI Service (AD HOC 80)
+        shell: pwsh
+        env:
+          PBI_PASSWORD: ${{ secrets.PBI_PASSWORD || secrets.DB_PASS }}
+        run: |
+          Write-Host "Iniciando consulta Live via REST API nos Modelos Inteligentes da P&G..."
+          & .\atualizar_powerbi.ps1 -OutputDir "."
+
+      - name: Publicar Base Atualizada no GitHub Pages
+        shell: pwsh
+        run: |
+          git config --global user.name "DHL PowerBI Bot"
+          git config --global user.email "dhl-bot@users.noreply.github.com"
+          git add stage_data.js
+          $status = git status --porcelain
+          if ($status) {
+            git commit -m "Auto-sync Power BI Live: Base de stages atualizada [skip ci]"
+            git push
+            Write-Host "✔ Base atualizada e publicada no GitHub Pages com sucesso!"
+          } else {
+            Write-Host "Nenhuma alteração detectada nos dados do Power BI."
+          }

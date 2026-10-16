@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "conferencia-stage-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/conferenciaStage/ConferenciaStageWebPart.js",
+          "manifest": "./src/webparts/conferenciaStage/ConferenciaStageWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "ConferenciaStageWebPartStrings": "lib/webparts/conferenciaStage/loc/{locale}.js"
+  }
+}

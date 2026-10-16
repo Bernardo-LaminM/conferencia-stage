@@ -243,10 +243,11 @@ $jsonPath = Join-Path $OutputDir "stage_data.json"
 $jsPath   = Join-Path $OutputDir "stage_data.js"
 
 $jsonContent = $finalDatabase | ConvertTo-Json -Depth 6 -Compress
-[System.IO.File]::WriteAllText($jsonPath, $jsonContent, [System.Text.Encoding]::UTF8)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText($jsonPath, $jsonContent, $utf8NoBom)
 
 $jsContent = "window.EMBEDDED_STAGE_DATA = " + $jsonContent + ";"
-[System.IO.File]::WriteAllText($jsPath, $jsContent, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText($jsPath, $jsContent, $utf8NoBom)
 
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host " SINCRONIZAÇÃO INTELIGENTE CONCLUÍDA COM SUCESSO!" -ForegroundColor Green

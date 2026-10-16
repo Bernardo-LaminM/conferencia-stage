@@ -3,6 +3,7 @@
  * Cada slot precisa de: pos, status, sku, lote, qtd (caixas no palete) e cap (caixas do palete cheio; se faltar, usa o maior qtd visto do SKU).
  * Fase 1 (juntar): paletes parciais do mesmo SKU+Lote são esvaziados dentro de outros, completando paletes cheios.
  * Fase 2 (liberar): paletes dos stages menos ocupados vão para vagas livres de stages vizinhos do mesmo embarque, esvaziando stages inteiros.
+ * Respeita s.vagas (capacidade da rua) quando informado.
  * opts: embarque (null = todos), destino 'completar' | 'novo', liberarStages (padrão true), incluirAguardando (padrão false), positions. */
 (function (root) {
   'use strict';
@@ -12,6 +13,8 @@
 
   function planScope(data, o) {
     var P = o.positions || DEFPOS, destino = o.destino || 'completar', liberar = o.liberarStages !== false, incl = !!o.incluirAguardando;
+    // vagas úteis de cada stage (rua de 8 = A–H); s.vagas vem do mapa (planta do CAD)
+    var PS = function (s) { return P.slice(0, +s.vagas || P.length); };
     var scope = data.stages.filter(function (s) { return o.embarque == null || String(s.embarque) === String(o.embarque); });
     var sidx = {}; scope.forEach(function (s, i) { sidx[s.id] = i; });
     var capE = {}, capO = {};
@@ -20,11 +23,7 @@
       if (+x.cap > (capE[x.sku] || 0)) capE[x.sku] = +x.cap;
       if (+x.qtd > (capO[x.sku] || 0)) capO[x.sku] = +x.qtd;
     }); });
-    var capOf = function (p) {
-      if (!p || !p.sku) return 0;
-      var c = capE[p.sku] || capO[p.sku] || 0;
-      return c >= 25 ? c : 40;
-    };
+    var capOf = function (p) { return capE[p.sku] || capO[p.sku] || 0; };
 
     var occ = {}, orig = {};
     scope.forEach(function (s) { (s.slots || []).forEach(function (x) {
@@ -40,12 +39,11 @@
     var tag = function (p) { return p.sku + (p.lote ? ' · ' + p.lote : ''); };
     var posI = function (p) { return P.indexOf(p); };
 
-    /* ---------- Fase 1: juntar SKU (merge de paletes parciais) ---------- */
+    /* ---------- Fase 1: juntar SKU+Lote ---------- */
     var groups = {};
     Object.keys(occ).forEach(function (k) {
       var p = occ[k]; if (!mov(p) || p.qtd >= capOf(p)) return;
-      var grpKey = (o.agruparPorSku !== false) ? p.sku : (p.sku + '|' + (p.lote || ''));
-      (groups[grpKey] = groups[grpKey] || []).push(p);
+      (groups[p.sku + '|' + (p.lote || '')] = groups[p.sku + '|' + (p.lote || '')] || []).push(p);
     });
     var nGrupos = 0;
     Object.keys(groups).forEach(function (g) {
@@ -57,7 +55,7 @@
 
       if (destino === 'novo') {
         var n = Math.ceil(total / cap), cx = L.reduce(function (a, p) { return a + sidx[p.sid]; }, 0) / L.length, free = [];
-        scope.forEach(function (s) { P.forEach(function (p) { if (!occ[K(s.id, p)]) free.push({ sid: s.id, pos: p, d: Math.abs(sidx[s.id] - cx) }); }); });
+        scope.forEach(function (s) { PS(s).forEach(function (p) { if (!occ[K(s.id, p)]) free.push({ sid: s.id, pos: p, d: Math.abs(sidx[s.id] - cx) }); }); });
         free.sort(function (a, b) { return a.d - b.d || sidx[a.sid] - sidx[b.sid] || posI(a.pos) - posI(b.pos); });
         if (free.length >= n) {
           var neu = free.slice(0, n).map(function (f) { var p = { sid: f.sid, pos: f.pos, status: 'conferido', lpn: 'NOVO', sku: L[0].sku, lote: L[0].lote, qtd: 0, novo: true, chg: true }; occ[K(f.sid, f.pos)] = p; return p; });
@@ -66,7 +64,7 @@
             var q = d.qtd;
             while (q > 0) {
               var mv = Math.min(q, cap - neu[t].qtd);
-              routes.push({ type: 'merge', fase: 1, from: { id: d.sid, pos: d.pos }, to: { id: neu[t].sid, pos: neu[t].pos }, qtd: mv, label: 'Juntar ' + mv + ' cx · SKU ' + d.sku });
+              routes.push({ type: 'merge', fase: 1, from: { id: d.sid, pos: d.pos }, to: { id: neu[t].sid, pos: neu[t].pos }, qtd: mv, label: tag(d) });
               neu[t].qtd += mv; q -= mv; if (neu[t].qtd >= cap && t < n - 1) t++;
             }
             delete occ[K(d.sid, d.pos)];
@@ -80,8 +78,7 @@
           var r = L[i], d = L[j], space = cap - r.qtd;
           if (space <= 0) { i++; continue; }
           var m = Math.min(space, d.qtd);
-          var lbl = 'Juntar ' + m + ' cx (' + (d.lote ? 'Lote ' + d.lote : ('SKU ' + d.sku)) + ')';
-          routes.push({ type: 'merge', fase: 1, from: { id: d.sid, pos: d.pos }, to: { id: r.sid, pos: r.pos }, qtd: m, label: lbl });
+          routes.push({ type: 'merge', fase: 1, from: { id: d.sid, pos: d.pos }, to: { id: r.sid, pos: r.pos }, qtd: m, label: tag(d) });
           r.qtd += m; d.qtd -= m; r.chg = true; d.chg = true;
           if (d.qtd <= 0) { delete occ[K(d.sid, d.pos)]; j--; }
           if (r.qtd >= cap) i++;
@@ -93,14 +90,15 @@
     /* ---------- Fase 2: liberar stages inteiros e compactar pátio ---------- */
     if (liberar) {
       var totalPal = Object.keys(occ).length;
-      var stagesNecessarios = Math.max(1, Math.ceil(totalPal / P.length));
+      var stagesNecessarios = 0, capAcum = 0;
+      while (stagesNecessarios < scope.length && (capAcum < totalPal || !stagesNecessarios)) capAcum += PS(scope[stagesNecessarios++]).length;
       
       var stagesDestino = scope.slice(0, stagesNecessarios);
       var stagesExcedentes = scope.slice(stagesNecessarios);
 
       var vagasLivresDestino = [];
       stagesDestino.forEach(function (sd) {
-        P.forEach(function (p) {
+        PS(sd).forEach(function (p) {
           if (!occ[K(sd.id, p)]) {
             vagasLivresDestino.push({ sid: sd.id, pos: p });
           }
@@ -198,3 +196,4 @@
 
   root.ConsolidationPlanner = { plan: plan };
 })(window);
+

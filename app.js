@@ -110,8 +110,8 @@ function getAllMasterStages() {
   for (let i = 1; i <= 34; i++) {
     set.add('SO' + String(i).padStart(3, '0'));
   }
-  // Faixa 2: Docas SO040 a SO074
-  for (let i = 40; i <= 74; i++) {
+  // Faixa 2: Docas SO040 a SO076 (termina no ST76 ao lado da Sala de Operações)
+  for (let i = 40; i <= 76; i++) {
     set.add('SO' + String(i).padStart(3, '0'));
   }
   // Faixa 3: Docas SO129 a SO142 (até o último stage físico do armazém)
@@ -142,7 +142,7 @@ function getAllMasterStages() {
   return Array.from(set).sort((a, b) => {
     const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
     const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-    return numB - numA; // Ao contrário: o 1 começa pela DIREITA
+    return numA - numB; // Ordem sequencial do 1 ao 76 (terminando ao lado da Sala de Operações)
   });
 }
 
@@ -496,10 +496,23 @@ function loadData() {
 
   // 2. Base embutida (stage_data.js) caso não haja base customizada salva
   if (!loadedFromCustom) {
-    if (window.EMBEDDED_STAGE_DATA) {
+    if (window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques && Object.keys(window.EMBEDDED_STAGE_DATA.embarques).length > 0) {
       database = JSON.parse(JSON.stringify(window.EMBEDDED_STAGE_DATA));
     } else {
       database = { embarques: {} };
+      // Fallback assíncrono para stage_data.json se stage_data.js estiver em cache/atrasado
+      try {
+        fetch('stage_data.json?t=' + Date.now())
+          .then(r => r.ok ? r.json() : null)
+          .then(j => {
+            if (j && j.embarques && Object.keys(j.embarques).length > 0) {
+              database = j;
+              updateBaseInfoUI();
+              updateHistoryBadge();
+              if (typeof renderYardGrid === 'function') renderYardGrid();
+            }
+          }).catch(() => {});
+      } catch (e) {}
     }
   }
 
@@ -556,15 +569,158 @@ function showToast(message, duration = 4000) {
 }
 
 /* =========================================================
-   PARSER DE PLANILHAS EXCEL (TABULAR + GUIA + WMS)
+   PARSER NATIVO DE CSV DIRETO NO NAVEGADOR (SEM DEPENDÊNCIAS)
+   ========================================================= */
+function parseDirectCsvText(csvText) {
+  if (!csvText) return {};
+  if (csvText.charCodeAt(0) === 0xFEFF) csvText = csvText.slice(1);
+
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) return {};
+
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.replace(/[\[\]'"]/g, '').trim().toLowerCase());
+
+  let idxEmb = -1, idxPal = -1, idxStage = -1, idxSku = -1, idxQtd = -1, idxOrd = -1, idxLote = -1;
+  headers.forEach((h, idx) => {
+    if (h.includes('car_move') || h.includes('embarque') || h.includes('carmove')) idxEmb = idx;
+    if (h.includes('pallet') || h.includes('palete') || h.includes('lpn') || h.includes('etiqueta')) idxPal = idx;
+    if (h.includes('stage') || h.includes('dstloc') || h.includes('destino')) idxStage = idx;
+    if (h.includes('sku') || h.includes('prtnum') || h.includes('material')) idxSku = idx;
+    if (h.includes('qtd') || h.includes('caixa') || h.includes('quantidade') || h.includes('pckqty')) idxQtd = idx;
+    if (h.includes('ordnum') || h.includes('order')) idxOrd = idx;
+    if (h.includes('lote') || h.includes('lotnum')) idxLote = idx;
+  });
+
+  if (idxEmb === -1 || idxPal === -1) {
+    idxEmb = 0; idxOrd = 1; idxPal = 2; idxStage = 3; idxSku = 4; idxQtd = 5;
+  }
+
+  const dict = {};
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(sep);
+    const embId = (parts[idxEmb] || '').trim();
+    const palId = (parts[idxPal] || '').trim();
+    if (!embId || !palId) continue;
+
+    const ordNum = idxOrd !== -1 ? (parts[idxOrd] || '').trim() : '';
+    const stage = idxStage !== -1 ? (parts[idxStage] || '').trim() : '';
+    const sku = idxSku !== -1 ? (parts[idxSku] || '').trim() : '';
+    const lote = idxLote !== -1 ? (parts[idxLote] || '').trim() : '';
+    const qtd = idxQtd !== -1 ? (parseInt(parts[idxQtd], 10) || 0) : 0;
+
+    if (!dict[embId]) {
+      dict[embId] = {
+        embarque: embId,
+        total_paletes: 0,
+        total_pecas: 0,
+        stages: new Set(),
+        pal: new Map()
+      };
+    }
+
+    const e = dict[embId];
+    if (stage) e.stages.add(stage);
+
+    if (!e.pal.has(palId)) {
+      e.pal.set(palId, {
+        palete: palId,
+        stage: stage,
+        order_num: ordNum,
+        lote: lote,
+        itens: [],
+        qtd_total: 0,
+        sku_resumo: sku || 'Material',
+        desc_resumo: sku ? 'SKU ' + sku : 'Material'
+      });
+    }
+
+    const p = e.pal.get(palId);
+    p.itens.push({
+      sku: sku,
+      desc_produto: sku ? 'SKU ' + sku : 'Material',
+      lote: lote,
+      qtd: qtd,
+      order_num: ordNum
+    });
+    p.qtd_total += qtd;
+    e.total_pecas += qtd;
+  }
+
+  const out = {};
+  Object.values(dict).forEach(e => {
+    const paletes = Array.from(e.pal.values());
+    out[e.embarque] = {
+      embarque: e.embarque,
+      total_paletes: paletes.length,
+      total_pecas: e.total_pecas,
+      stages: Array.from(e.stages),
+      paletes: paletes
+    };
+    const alias = e.embarque.replace(/^0+/, '');
+    if (alias && alias !== e.embarque) {
+      out[alias] = out[e.embarque];
+    }
+  });
+
+  return out;
+}
+
+window.processarTextoCsvColado = function() {
+  const textarea = document.getElementById('txtCsvManual');
+  if (!textarea || !textarea.value.trim()) {
+    if (typeof showToast === 'function') showToast('Cole o conteúdo do CSV primeiro.');
+    return;
+  }
+
+  try {
+    const parsed = parseDirectCsvText(textarea.value);
+    const count = Object.keys(parsed).length;
+    if (count === 0) {
+      throw new Error('Não foi possível identificar colunas válidas no CSV colado.');
+    }
+    injetarParsedEmbarquesNoSistema(parsed, 'CSV_Colado_Direto.csv', false);
+    if (typeof showToast === 'function') {
+      showToast(`✔ CSV colado processado! ${count} embarques carregados no sistema.`);
+    }
+    textarea.value = '';
+  } catch (err) {
+    if (typeof showToast === 'function') showToast('❌ Erro no CSV: ' + err.message);
+  }
+};
+
+/* =========================================================
+   PARSER DE PLANILHAS EXCEL & CSV (TABULAR + GUIA + WMS)
    ========================================================= */
 function processExcelFile(file) {
   const feedback = document.getElementById('uploadFeedback');
   if (feedback) {
     feedback.style.display = 'block';
-    feedback.innerHTML = `<div style="color: var(--text-secondary); padding: 10px;">⏳ Lendo e processando planilha <b>${file.name}</b>...</div>`;
+    feedback.innerHTML = `<div style="color: var(--text-secondary); padding: 10px;">⏳ Lendo e processando <b>${file.name}</b>...</div>`;
   }
 
+  // 1. Processamento ultra-rápido nativo se for arquivo .CSV
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    const textReader = new FileReader();
+    textReader.onload = function(ev) {
+      try {
+        const text = ev.target.result;
+        const parsedEmbarques = parseDirectCsvText(text);
+        if (Object.keys(parsedEmbarques).length === 0) {
+          throw new Error('Não foi possível identificar dados no CSV. Verifique os cabeçalhos.');
+        }
+        injetarParsedEmbarquesNoSistema(parsedEmbarques, file.name, false);
+      } catch (err) {
+        if (feedback) {
+          feedback.innerHTML = `<div style="background: var(--status-diverg-bg); border: 1px solid var(--status-diverg-border); color: #B91C1C; padding: 14px; border-radius: var(--radius-sm);"><b>❌ Erro ao ler CSV:</b> ${err.message}</div>`;
+        }
+      }
+    };
+    textReader.readAsText(file, 'utf-8');
+    return;
+  }
+
+  // 2. Processamento via SheetJS para planilhas .XLSX / .XLS
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
@@ -599,17 +755,36 @@ function processExcelFile(file) {
         parsedEmbarques = parseWmsWorkbook(workbook);
       }
 
-      const embKeys = Object.keys(parsedEmbarques);
-      if (embKeys.length === 0) {
-        throw new Error('Não foi possível identificar dados de embarque/paletes nesta planilha. Verifique o formato.');
+      injetarParsedEmbarquesNoSistema(parsedEmbarques, file.name, isGuia);
+    } catch(err) {
+      if (feedback) {
+        feedback.innerHTML = `<div style="background: var(--status-diverg-bg); border: 1px solid var(--status-diverg-border); color: #B91C1C; padding: 14px; border-radius: var(--radius-sm);"><b>❌ Erro ao processar arquivo:</b> ${err.message}</div>`;
       }
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
 
-      // 1. Mapear stage -> embarque anterior
-      const prevStageEmbarque = {};
-      if (database && database.embarques) {
-        Object.values(database.embarques).forEach(e => {
-          if (e && e.embarque && e.stages) {
-            const sList = Array.isArray(e.stages) ? e.stages : String(e.stages).split(/[\s,]+/);
+function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = false) {
+  const feedback = document.getElementById('uploadFeedback');
+  const embKeys = Object.keys(parsedEmbarques);
+  if (embKeys.length === 0) {
+    throw new Error('Não foi possível identificar dados de embarque/paletes. Verifique o formato.');
+  }
+
+  // 1. Mapear stage -> embarque anterior
+  const prevStageEmbarque = {};
+  if (database && database.embarques) {
+    Object.values(database.embarques).forEach(e => {
+      if (e && e.embarque && e.stages) {
+        const sList = Array.isArray(e.stages) ? e.stages : String(e.stages).split(/[\s,]+/);
+        sList.forEach(s => {
+          const norm = normalizeStageName(s);
+          if (norm) prevStageEmbarque[norm] = e.embarque;
+        });
+      }
+    });
+  }
             sList.forEach(s => {
               const norm = normalizeStageName(s);
               if (norm) prevStageEmbarque[norm] = e.embarque;
@@ -679,7 +854,7 @@ function processExcelFile(file) {
           total_embarques: embKeys.length,
           data_base: dataHoje,
           gerado_em: dataHoraHoje,
-          arquivo_origem: file.name,
+          arquivo_origem: nomeOrigem,
           embarques: parsedEmbarques
         };
       } else {
@@ -687,7 +862,7 @@ function processExcelFile(file) {
         if (!database) database = { embarques: {} };
         database.data_base = dataHoje;
         database.gerado_em = dataHoraHoje;
-        database.arquivo_origem = file.name;
+        database.arquivo_origem = nomeOrigem;
         embKeys.forEach(embId => {
           database.embarques[embId] = parsedEmbarques[embId];
         });
@@ -714,7 +889,7 @@ function processExcelFile(file) {
       // Grava snapshot na Evolução da Base
       const evolSnapshot = {
         data: dataHoraHoje,
-        arquivo: file.name,
+        arquivo: nomeOrigem,
         totalEmbarques: uniqueCount,
         totalPaletes: totalPaletesDepois,
         detalhes: `Upload de hoje processado: ${embKeys.length} embarques sincronizados. ${stagesMantidos} stages com mesmo embarque mantidos, ${stagesResetados} stages atualizados/resetados de acordo com a planilha.`
@@ -730,7 +905,7 @@ function processExcelFile(file) {
 
       // Sincroniza a nova base com todos os operadores na nuvem / GitHub Pages em tempo real!
       if (window.DHL_SYNC && typeof window.DHL_SYNC.notifyBaseUpdated === 'function') {
-        window.DHL_SYNC.notifyBaseUpdated(file.name, database);
+        window.DHL_SYNC.notifyBaseUpdated(nomeOrigem, database);
       }
 
       // Se havia conferência ativa deste embarque, sincroniza o activeEmbarque
@@ -751,7 +926,7 @@ function processExcelFile(file) {
         feedback.innerHTML = `
           <div style="background: var(--status-ok-bg); border: 1px solid var(--status-ok-border); color: #065F46; padding: 14px; border-radius: var(--radius-sm); font-size: 0.9rem;">
             <b>✔ Importação Concluída com Sucesso!</b><br>
-            • Arquivo: <b>${file.name}</b><br>
+            • Origem: <b>${nomeOrigem}</b><br>
             • Embarques no Arquivo: <b>${embKeys.length}</b> (Total Únicos na Base: ${uniqueCount})<br>
             • Data da Base: <b>${dataHoje}</b><br>
             • Stages Mantidos: <b>${stagesMantidos}</b> | Stages Atualizados/Resetados: <b>${stagesResetados}</b><br>
@@ -1220,26 +1395,86 @@ function getPartialConferenceSession(embId) {
   }
 }
 
+// Modo de empilhamento: '1x' (padrão 1 por vaga), '2x' (duplado: chão + superior), '3x' (fracionado: até 3 por vaga)
+window.modoEmpilhamento = localStorage.getItem('dhl_modo_empilhamento_v1') || '1x';
+
+window.toggleModoEmpilhamento = function() {
+  if (window.modoEmpilhamento === '1x') {
+    window.modoEmpilhamento = '2x';
+  } else if (window.modoEmpilhamento === '2x') {
+    window.modoEmpilhamento = '3x';
+  } else {
+    window.modoEmpilhamento = '1x';
+  }
+  try {
+    localStorage.setItem('dhl_modo_empilhamento_v1', window.modoEmpilhamento);
+  } catch(e) {}
+  updateModoEmpilhamentoUI();
+  activeConference.activeSlot = calculateNextTargetSlot();
+  if (typeof renderStageSlotsGrid === 'function') renderStageSlotsGrid();
+  
+  const desc = window.modoEmpilhamento === '2x' 
+    ? '🥞 Carga Duplada (2 paletes por vaga)' 
+    : (window.modoEmpilhamento === '3x' ? '📦 Carga Fracionada (até 3 paletes por vaga)' : 'Carga Padrão (1 palete por vaga)');
+  showToast(`Modo alterado para: <b>${desc}</b>`);
+};
+
+function updateModoEmpilhamentoUI() {
+  const btn = document.getElementById('btnModoEmpilhamento');
+  if (!btn) return;
+  if (window.modoEmpilhamento === '2x') {
+    btn.innerHTML = '🥞 Carga: Duplada (2x)';
+    btn.style.background = '#F3E8FF';
+    btn.style.borderColor = '#9333EA';
+    btn.style.color = '#7E22CE';
+  } else if (window.modoEmpilhamento === '3x') {
+    btn.innerHTML = '📦 Carga: Fracionada (3x)';
+    btn.style.background = '#FFEDD5';
+    btn.style.borderColor = '#EA580C';
+    btn.style.color = '#C2410C';
+  } else {
+    btn.innerHTML = '🥞 Carga: Padrão (1x)';
+    btn.style.background = '#EEF2FF';
+    btn.style.borderColor = '#6366F1';
+    btn.style.color = '#4338CA';
+  }
+}
+
 function calculateNextTargetSlot(stageCode) {
   const rawStg = stageCode || (activeConference && activeConference.currentPhysicalStage) || (activeEmbarque ? formatStages(activeEmbarque.stages) : '');
   const stg = normalizeStageName(rawStg) || rawStg;
   const cap = (activeConference && activeConference.capacity) || 10;
   const blocked = getStageBlockedSlots(stg);
   const slots = (activeConference && activeConference.stageSlots && (activeConference.stageSlots[stg] || activeConference.stageSlots[rawStg])) || (activeConference && activeConference.slots) || {};
+  const currentSlot = (activeConference && activeConference.activeSlot) || 1;
+  const maxPerSlot = (window.modoEmpilhamento === '3x') ? 3 : (window.modoEmpilhamento === '2x' ? 2 : 1);
+
+  // Se a vaga atual ainda tem espaço para o próximo nível no modo duplado ou fracionado:
+  const curSlotData = slots[currentSlot];
+  const curSlotCount = curSlotData ? ((curSlotData.paletes && curSlotData.paletes.length) || (curSlotData.palete ? 1 : 0)) : 0;
+  if (curSlotCount > 0 && curSlotCount < maxPerSlot && !blocked.includes(currentSlot)) {
+    // Mantém na mesma vaga para receber o próximo nível (Nível 2 ou Nível 3)!
+    return currentSlot;
+  }
+
+  function slotHasSpace(s) {
+    if (blocked.includes(s)) return false;
+    const sd = slots[s];
+    if (!sd) return true;
+    if (sd.status === 'divergent') return false;
+    const count = (sd.paletes && sd.paletes.length) || (sd.palete ? 1 : 0);
+    return count < maxPerSlot;
+  }
 
   if (activeConference && activeConference.direction === 'desc') {
     // Sentido 10 -> 1
     for (let s = cap; s >= 1; s--) {
-      if (!blocked.includes(s) && (!slots[s] || (slots[s].status !== 'done' && slots[s].status !== 'divergent'))) {
-        return s;
-      }
+      if (slotHasSpace(s)) return s;
     }
   } else {
     // Sentido 1 -> 10
     for (let s = 1; s <= cap; s++) {
-      if (!blocked.includes(s) && (!slots[s] || (slots[s].status !== 'done' && slots[s].status !== 'divergent'))) {
-        return s;
-      }
+      if (slotHasSpace(s)) return s;
     }
   }
   return 1;
@@ -1401,6 +1636,9 @@ function renderStageSlotsGrid() {
     const posLetter = SLOT_LETTERS[s - 1] || s;
     const locCode = formatStageSlotDisplay(currentStg, s);
 
+    const paletesNaVaga = (slotData && slotData.paletes && Array.isArray(slotData.paletes)) ? slotData.paletes : (slotData && slotData.palete ? [{ palete: slotData.palete, lpn: slotData.lpn, nivel: 1 }] : []);
+    const qtdPlts = paletesNaVaga.length;
+
     let cellClass = 'slot-cell';
     let statusText = 'LIVRE';
     let lpnText = '';
@@ -1408,14 +1646,26 @@ function renderStageSlotsGrid() {
     if (isBlocked) {
       cellClass += ' slot-blocked';
       statusText = 'BLOQUEADO ✖';
-    } else if (slotData && slotData.status === 'done') {
-      cellClass += ' slot-done';
-      statusText = 'CONFERIDO ✔';
-      lpnText = slotData.lpn ? '...' + slotData.lpn.slice(-4) : '';
+    } else if (slotData && (slotData.status === 'done' || qtdPlts > 0) && slotData.status !== 'divergent') {
+      if (qtdPlts >= 3) {
+        cellClass += ' slot-fracionado';
+        statusText = '3x FRACIONADO 📦';
+        lpnText = paletesNaVaga.map(p => `N${p.nivel || 1}: ...` + String(p.lpn || p.palete).slice(-4)).join('<br>');
+      } else if (qtdPlts === 2) {
+        cellClass += ' slot-duplado';
+        statusText = '2x DUPLADO 🥞';
+        const pSuperior = paletesNaVaga[1] || {};
+        const pChao = paletesNaVaga[0] || {};
+        lpnText = `N2: ...${String(pSuperior.lpn || pSuperior.palete).slice(-4)}<br>N1: ...${String(pChao.lpn || pChao.palete).slice(-4)}`;
+      } else {
+        cellClass += ' slot-done';
+        statusText = 'CONFERIDO ✔';
+        lpnText = slotData.lpn ? '...' + String(slotData.lpn).slice(-4) : '';
+      }
     } else if (slotData && slotData.status === 'divergent') {
       cellClass += ' slot-divergent';
       statusText = 'DIVERGÊNCIA ✖';
-      lpnText = slotData.lpn ? '...' + slotData.lpn.slice(-4) : '';
+      lpnText = slotData.lpn ? '...' + String(slotData.lpn).slice(-4) : '';
     } else if (isTarget) {
       cellClass += ' slot-target';
       statusText = 'BIPANDO AGORA';
@@ -1432,7 +1682,7 @@ function renderStageSlotsGrid() {
         <span class="slot-num">${locCode}</span>
         <span class="slot-pos-sub">Vaga ${s} (${posLetter})</span>
         <span class="slot-status-text">${statusText}</span>
-        ${lpnText ? `<span class="slot-lpn">${lpnText}</span>` : ''}
+        ${lpnText ? `<span class="slot-lpn" style="line-height:1.2;">${lpnText}</span>` : ''}
       </div>
     `;
   }
@@ -1512,10 +1762,285 @@ window.handleSlotClick = function(slotNum) {
     return;
   }
 
+  // Se a vaga já tem palete conferido, sugere a opção de re-bipar / corrigir LPN!
+  const curStg = normalizeStageName(activeConference.currentPhysicalStage || (activeEmbarque && activeEmbarque.stages && activeEmbarque.stages[0]) || 'SO001');
+  const slotData = (activeConference.stageSlots && activeConference.stageSlots[curStg]) ? activeConference.stageSlots[curStg][slotNum] : null;
+  const temPalete = slotData && (slotData.status === 'done' || (slotData.paletes && slotData.paletes.length > 0) || slotData.palete);
+
+  if (temPalete) {
+    abrirModalCorrecaoLpn(slotNum);
+    return;
+  }
+
   activeConference.activeSlot = slotNum;
   renderStageSlotsGrid();
   focusScanner();
   showToast(`Próxima alocação direcionada para a Vaga ${slotNum}`);
+};
+
+/* =========================================================
+   CONCLUIR STAGE ATUAL & ATRELAR PRÓXIMO STAGE
+   ========================================================= */
+window.abrirModalProximoStage = function() {
+  if (!activeEmbarque) {
+    showToast('⚠️ Nenhum embarque em conferência ativa.');
+    return;
+  }
+  const curStg = normalizeStageName(activeConference.currentPhysicalStage || (activeEmbarque.stages && activeEmbarque.stages[0]) || 'SO001');
+  const nomeEl = document.getElementById('proxStageAtualNome');
+  if (nomeEl) nomeEl.textContent = curStg;
+
+  const inp = document.getElementById('inputProximoStageCode');
+  if (inp) inp.value = '';
+
+  const modal = document.getElementById('modalProximoStage');
+  if (modal) {
+    modal.style.display = 'flex';
+    setTimeout(() => { if (inp) inp.focus(); }, 120);
+  }
+};
+
+window.fecharModalProximoStage = function() {
+  const modal = document.getElementById('modalProximoStage');
+  if (modal) modal.style.display = 'none';
+  focusScanner();
+};
+
+window.confirmarProximoStage = function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const inp = document.getElementById('inputProximoStageCode');
+  const rawCode = (inp ? inp.value : '').trim();
+  if (!rawCode) {
+    alert('Por favor, bipe ou digite o código do próximo Stage.');
+    if (inp) inp.focus();
+    return;
+  }
+
+  const nextStageNorm = normalizeStageName(rawCode);
+  if (!nextStageNorm) {
+    alert('Código de Stage inválido. Exemplo: SO012, SO013, ST040.');
+    if (inp) inp.focus();
+    return;
+  }
+
+  // Atrela o novo stage ao embarque ativo
+  if (!Array.isArray(activeEmbarque.stages)) {
+    activeEmbarque.stages = activeEmbarque.stages ? [activeEmbarque.stages] : [];
+  }
+  if (!activeEmbarque.stages.some(s => normalizeStageName(s) === nextStageNorm)) {
+    activeEmbarque.stages.push(nextStageNorm);
+  }
+
+  // Atualiza também na base global de dados
+  if (database && database.embarques && database.embarques[activeEmbarque.embarque]) {
+    database.embarques[activeEmbarque.embarque].stages = activeEmbarque.stages;
+  }
+
+  // Comuta para o novo stage físico e reseta vaga alvo para a Vaga 1 (A)
+  switchPhysicalStage(nextStageNorm);
+  activeConference.activeSlot = 1;
+
+  fecharModalProximoStage();
+
+  sound.playSuccess(`Stage ${nextStageNorm} atrelado`);
+  showToast(`⏭️ Stage <b>${nextStageNorm}</b> atrelado com sucesso ao Embarque ${activeEmbarque.embarque}!`);
+  showFeedback('ok', `✔ <b>Stage ${nextStageNorm} atrelado!</b> Prossiga bipando as LPNs na Vaga A.`);
+
+  // Sincroniza via On-Time em tempo real
+  if (window.DHL_SYNC && typeof window.DHL_SYNC.broadcast === 'function') {
+    window.DHL_SYNC.broadcast('STAGE_ATRELADO', {
+      embarque: activeEmbarque.embarque,
+      novoStage: nextStageNorm,
+      stages: activeEmbarque.stages
+    });
+  }
+
+  savePartialConferenceSession();
+  renderStageSlotsGrid();
+  updateUI();
+  focusScanner();
+};
+
+/* =========================================================
+   CORREÇÃO & RE-BIPAGEM DE LPN COM MOTIVO (SELECT POINT / CHECKBOX)
+   ========================================================= */
+let slotCorrecaoAtivo = null;
+
+window.abrirModalCorrecaoLpn = function(slotPreSel = null) {
+  if (!activeEmbarque) {
+    showToast('⚠️ Nenhum embarque ativo.');
+    return;
+  }
+  const curStg = normalizeStageName(activeConference.currentPhysicalStage || (activeEmbarque.stages && activeEmbarque.stages[0]) || 'SO001');
+  const stgSlots = (activeConference.stageSlots && activeConference.stageSlots[curStg]) ? activeConference.stageSlots[curStg] : {};
+
+  const select = document.getElementById('selectVagaCorrecao');
+  if (!select) return;
+  select.innerHTML = '';
+
+  const cap = activeConference.capacity || 10;
+  const vagasConferidas = [];
+
+  for (let s = 1; s <= cap; s++) {
+    const sl = stgSlots[s];
+    const temPalete = sl && (sl.status === 'done' || (sl.paletes && sl.paletes.length > 0) || sl.palete);
+    if (temPalete) {
+      vagasConferidas.push(s);
+      const opt = document.createElement('option');
+      opt.value = s;
+      const posLetter = ['A','B','C','D','E','F','G','H','I','J'][s - 1] || s;
+      const loc = formatStageSlotDisplay(curStg, s);
+      const lpnStr = sl.lpn || (sl.paletes && sl.paletes[0] ? (sl.paletes[0].lpn || sl.paletes[0].palete) : sl.palete) || '';
+      opt.textContent = `${loc} (Vaga ${posLetter}) • LPN ...${String(lpnStr).slice(-6)}`;
+      select.appendChild(opt);
+    }
+  }
+
+  if (vagasConferidas.length === 0) {
+    showToast('⚠️ Nenhuma vaga possui paletes conferidos para re-bipar neste stage.');
+    return;
+  }
+
+  const alvo = (slotPreSel && vagasConferidas.includes(slotPreSel)) ? slotPreSel : vagasConferidas[0];
+  select.value = alvo;
+  aoMudarVagaCorrecao(alvo);
+
+  const modal = document.getElementById('modalCorrecaoLpn');
+  if (modal) modal.style.display = 'flex';
+};
+
+window.fecharModalCorrecaoLpn = function() {
+  const modal = document.getElementById('modalCorrecaoLpn');
+  if (modal) modal.style.display = 'none';
+  slotCorrecaoAtivo = null;
+  focusScanner();
+};
+
+window.aoMudarVagaCorrecao = function(slotNum) {
+  slotNum = parseInt(slotNum, 10);
+  slotCorrecaoAtivo = slotNum;
+
+  const curStg = normalizeStageName(activeConference.currentPhysicalStage || (activeEmbarque && activeEmbarque.stages && activeEmbarque.stages[0]) || 'SO001');
+  const sl = (activeConference.stageSlots && activeConference.stageSlots[curStg]) ? activeConference.stageSlots[curStg][slotNum] : null;
+
+  const container = document.getElementById('listaLpnsVagaRadio');
+  if (!container) return;
+
+  const paletes = (sl && sl.paletes && Array.isArray(sl.paletes) && sl.paletes.length > 0) 
+    ? sl.paletes 
+    : (sl && sl.palete ? [{ palete: sl.palete, lpn: sl.lpn || sl.palete, nivel: 1, sku: sl.sku, qtd: sl.qtd }] : []);
+
+  if (paletes.length === 0) {
+    container.innerHTML = '<span style="color:#64748B;">Nenhum palete registrado nesta vaga.</span>';
+    return;
+  }
+
+  container.innerHTML = paletes.map((p, idx) => {
+    const lpn = p.lpn || p.palete;
+    const isChecked = idx === 0 ? 'checked' : '';
+    const nivelStr = paletes.length > 1 ? `[Nível ${p.nivel || (idx + 1)}] ` : '';
+    return `
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; background:#fff; padding:6px 10px; border-radius:6px; border:1px solid #E2E8F0;">
+        <input type="radio" name="radioPaleteCorrecaoLpn" value="${lpn}" ${isChecked}>
+        <span><b>${nivelStr}LPN:</b> <code style="font-weight:800; color:#0F172A;">${lpn}</code> ${p.sku ? '• SKU ' + p.sku : ''} ${p.qtd ? '• ' + p.qtd + ' cx' : ''}</span>
+      </label>
+    `;
+  }).join('');
+};
+
+window.confirmarRebipagemLpn = function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (!slotCorrecaoAtivo) {
+    slotCorrecaoAtivo = parseInt(document.getElementById('selectVagaCorrecao')?.value, 10);
+  }
+  if (!slotCorrecaoAtivo) {
+    alert('Selecione uma vaga para corrigir.');
+    return;
+  }
+
+  const radioLpn = document.querySelector('input[name="radioPaleteCorrecaoLpn"]:checked');
+  const lpnParaRemover = radioLpn ? radioLpn.value : null;
+
+  const radioMotivo = document.querySelector('input[name="motivoRebipagem"]:checked');
+  const motivoCodigo = radioMotivo ? radioMotivo.value : 'LPN_INCORRETA';
+  const obsTexto = (document.getElementById('inputObsCorrecao')?.value || '').trim();
+
+  const motivosMap = {
+    'LPN_INCORRETA': 'Bipagem de LPN incorreta / trocada',
+    'PALETE_DIVERGENTE': 'Palete físico divergente no stage',
+    'TROCA_POSICAO': 'Inversão / Troca de vaga física',
+    'AJUSTE_DUPLADO_FRACIONADO': 'Ajuste de Duplado/Fracionado',
+    'RECONTAGEM_QUALIDADE': 'Recontagem / Auditoria'
+  };
+  const motivoLegivel = motivosMap[motivoCodigo] || motivoCodigo;
+  const motivoCompleto = obsTexto ? `${motivoLegivel} (${obsTexto})` : motivoLegivel;
+
+  const curStg = normalizeStageName(activeConference.currentPhysicalStage || (activeEmbarque && activeEmbarque.stages && activeEmbarque.stages[0]) || 'SO001');
+  const sl = (activeConference.stageSlots && activeConference.stageSlots[curStg]) ? activeConference.stageSlots[curStg][slotCorrecaoAtivo] : null;
+
+  if (sl) {
+    // 1. Remove a LPN de activeConference.conferidos
+    if (lpnParaRemover && activeConference.conferidos) {
+      activeConference.conferidos.delete(lpnParaRemover);
+      const cleanKey = lpnParaRemover.replace(/^0+/, '');
+      activeConference.conferidos.delete(cleanKey);
+    }
+
+    // 2. Se for vaga com múltiplos paletes (duplado/fracionado), remove apenas o palete selecionado
+    if (sl.paletes && sl.paletes.length > 1 && lpnParaRemover) {
+      sl.paletes = sl.paletes.filter(p => (p.lpn || p.palete) !== lpnParaRemover);
+      sl.paletes.forEach((p, idx) => p.nivel = idx + 1);
+      const topP = sl.paletes[sl.paletes.length - 1];
+      sl.palete = topP.palete;
+      sl.lpn = topP.lpn || topP.palete;
+      sl.sku = topP.sku;
+      sl.qtd = topP.qtd;
+      sl.isDuplado = (sl.paletes.length === 2);
+      sl.isFracionado = (sl.paletes.length >= 3);
+    } else {
+      // Vaga fica livre para receber a re-bipagem
+      delete activeConference.stageSlots[curStg][slotCorrecaoAtivo];
+      if (activeConference.slots && activeConference.slots[slotCorrecaoAtivo]) {
+        delete activeConference.slots[slotCorrecaoAtivo];
+      }
+    }
+  }
+
+  // Direciona a vaga alvo imediatamente para a vaga que foi limpa
+  activeConference.activeSlot = slotCorrecaoAtivo;
+
+  // Registra no histórico da conferência
+  if (!activeConference.historico) activeConference.historico = [];
+  activeConference.historico.unshift({
+    timestamp: new Date().toLocaleTimeString('pt-BR'),
+    tipo: 'CORRECAO_LPN',
+    stage: curStg,
+    vaga: slotCorrecaoAtivo,
+    lpnRemovida: lpnParaRemover,
+    motivo: motivoCompleto
+  });
+
+  savePartialConferenceSession();
+  fecharModalCorrecaoLpn();
+
+  sound.playWarning('Vaga liberada para re-bipar');
+  showToast(`🔄 Vaga ${formatStageSlotDisplay(curStg, slotCorrecaoAtivo)} liberada para Re-bipagem! Motivo: ${motivoLegivel}`);
+  showFeedback('warn', `🔄 <b>Vaga liberada para nova LPN!</b> Bipe agora o palete correto para a Vaga ${formatStageSlotDisplay(curStg, slotCorrecaoAtivo)}.`);
+
+  // Sincroniza via On-Time
+  if (window.DHL_SYNC && typeof window.DHL_SYNC.broadcast === 'function') {
+    window.DHL_SYNC.broadcast('REBIPAGEM_LPN', {
+      embarque: activeEmbarque.embarque,
+      stage: curStg,
+      vaga: slotCorrecaoAtivo,
+      lpnRemovida: lpnParaRemover,
+      motivo: motivoCompleto
+    });
+  }
+
+  renderStageSlotsGrid();
+  updateUI();
+  focusScanner();
 };
 
 /* =========================================================
@@ -2381,6 +2906,53 @@ window.closeStageDetailModal = function() {
   if (modal) modal.style.display = 'none';
 };
 
+window.localizarEmbarqueUniversal = function(termo) {
+  if (!database || !database.embarques || !termo) return null;
+  const raw = String(termo).trim();
+  const cleanDigits = raw.replace(/\D/g, '');
+  const cleanNoZeros = cleanDigits.replace(/^0+/, '');
+
+  // 1. Busca direta pelas chaves
+  const chavesTentativas = [
+    raw,
+    cleanDigits,
+    cleanNoZeros,
+    '00' + cleanNoZeros,
+    '0' + cleanNoZeros
+  ].filter(Boolean);
+
+  for (const k of chavesTentativas) {
+    if (database.embarques[k]) {
+      return { embarque: database.embarques[k], encontradoPor: 'embarque', termoBuscado: raw };
+    }
+  }
+
+  // 2. Busca iterando sobre todos os embarques comparando id normalizado
+  for (const k of Object.keys(database.embarques)) {
+    const emb = database.embarques[k];
+    if (!emb) continue;
+    const embNum = String(emb.embarque || k).replace(/\D/g, '').replace(/^0+/, '');
+    if (cleanNoZeros && embNum === cleanNoZeros) {
+      return { embarque: emb, encontradoPor: 'embarque', termoBuscado: raw };
+    }
+  }
+
+  // 3. Se não achou como número de embarque, busca como LPN de Palete em toda a base!
+  if (typeof findPalletAcrossAllEmbarques === 'function') {
+    const crossMatch = findPalletAcrossAllEmbarques(raw);
+    if (crossMatch && crossMatch.embarque) {
+      return {
+        embarque: crossMatch.embarque,
+        encontradoPor: 'palete',
+        paleteEncontrado: crossMatch.palete,
+        termoBuscado: raw
+      };
+    }
+  }
+
+  return null;
+};
+
 window.entrarEmbarquePorId = function(embId) {
   if (!embId) return;
   closeDashboard();
@@ -2408,14 +2980,22 @@ function entrarNoEmbarque() {
     return;
   }
 
-  if (!database || !database.embarques || !database.embarques[embId]) {
+  const buscaRes = window.localizarEmbarqueUniversal(embId);
+
+  if (!buscaRes || !buscaRes.embarque) {
     sound.playError('Embarque não cadastrado');
-    alert(`Embarque "${embId}" não localizado na base de dados!\n\nVocê pode carregar a planilha deste embarque clicando no botão "Atualizar Excel" no topo.`);
+    alert(`Embarque ou Palete "${embId}" não localizado na base de dados!\n\nVocê pode carregar a planilha deste embarque clicando no botão "Atualizar Base" no topo.`);
     if (input) { input.select(); input.focus(); }
     return;
   }
 
-  activeEmbarque = database.embarques[embId];
+  activeEmbarque = buscaRes.embarque;
+  embId = activeEmbarque.embarque;
+  if (input) input.value = embId;
+
+  if (buscaRes.encontradoPor === 'palete') {
+    showToast(`🎯 <b>Palete Localizado!</b> Embarque identificado: <b>${embId}</b>`);
+  }
   if (!Array.isArray(activeEmbarque.paletes)) {
     activeEmbarque.paletes = [activeEmbarque.paletes];
   }
@@ -2681,6 +3261,42 @@ function handleBarcodeInput(e) {
   }
 }
 
+function verificarStageRealmenteLotado(stgFisico, cap) {
+  if (!activeConference || !activeConference.stageSlots || !activeConference.stageSlots[stgFisico]) return false;
+  const slots = activeConference.stageSlots[stgFisico];
+  const maxPerSlot = (window.modoEmpilhamento === '3x') ? 3 : (window.modoEmpilhamento === '2x' ? 2 : 1);
+  const blocked = (typeof getStageBlockedSlots === 'function') ? getStageBlockedSlots(stgFisico) : [];
+
+  let vagasComEspaco = 0;
+  for (let s = 1; s <= cap; s++) {
+    if (blocked.includes(s)) continue;
+    const sd = slots[s];
+    if (!sd) {
+      vagasComEspaco++;
+      continue;
+    }
+    if (sd.status === 'divergent') continue;
+    const count = (sd.paletes && sd.paletes.length) || (sd.palete ? 1 : 0);
+    if (count < maxPerSlot) {
+      vagasComEspaco++;
+    }
+  }
+  return (vagasComEspaco === 0);
+}
+
+function contarTotalPaletesNoStage(stgFisico, cap) {
+  if (!activeConference || !activeConference.stageSlots || !activeConference.stageSlots[stgFisico]) return 0;
+  const slots = activeConference.stageSlots[stgFisico];
+  let tot = 0;
+  for (let s = 1; s <= cap; s++) {
+    const sd = slots[s];
+    if (sd) {
+      tot += (sd.paletes && sd.paletes.length) || (sd.palete ? 1 : 0);
+    }
+  }
+  return tot;
+}
+
 function processBarcode(rawCode) {
   if (!activeEmbarque || isProcessingBarcode) return;
   const code = normalizeBarcode(rawCode);
@@ -2788,28 +3404,32 @@ function processBarcode(rawCode) {
     if (!activeConference.stageSlots) activeConference.stageSlots = {};
     if (!activeConference.stageSlots[stgFisico]) activeConference.stageSlots[stgFisico] = {};
 
-    // Quantos paletes já estão alocados neste stage físico
-    const countInStage = Object.values(activeConference.stageSlots[stgFisico]).filter(s => s && (s.status === 'done' || s.status === 'divergent')).length;
+    // Quantos paletes já estão alocados neste stage físico (considerando duplados e fracionados)
+    const countInStage = contarTotalPaletesNoStage(stgFisico, cap);
+    const isStageFull = verificarStageRealmenteLotado(stgFisico, cap);
 
-    // SE O STAGE ATUAL JÁ ATINGIU A CAPACIDADE MÁXIMA FÍSICA (EX: 10/10)
+    // SE O STAGE ATUAL JÁ ATINGIU A CAPACIDADE MÁXIMA FÍSICA DE EMPILHAMENTO
     // OBRIGATÓRIO BIPAR O OUTRO ST OU SO!
-    if (!activeConference.conferidos.has(foundPallet.palete) && countInStage >= cap) {
+    if (!activeConference.conferidos.has(foundPallet.palete) && isStageFull) {
       sound.playWarning('Stage lotado. Bipe a placa do novo Stage.');
       triggerCardFlash('pulse-err');
+
+      const maxPerSlot = (window.modoEmpilhamento === '3x') ? 3 : (window.modoEmpilhamento === '2x' ? 2 : 1);
+      const capTotal = cap * maxPerSlot;
 
       activeConference.stageLotadoBloqueio = {
         stageCheio: stgFisico,
         count: countInStage,
-        cap: cap,
+        cap: capTotal,
         pendingLpn: foundPallet.palete
       };
 
       const msgEl = document.getElementById('stageLotadoMsg');
       if (msgEl) {
-        msgEl.innerHTML = `O Stage <b>${stgFisico}</b> atingiu a capacidade física de <b>${countInStage}/${cap} vagas</b>.<br>Palete <code>${foundPallet.palete}</code> aguardando alocação.`;
+        msgEl.innerHTML = `O Stage <b>${stgFisico}</b> atingiu a capacidade física máxima de <b>${countInStage}/${capTotal} paletes</b>.<br>Palete <code>${foundPallet.palete}</code> aguardando alocação.`;
       }
 
-      showFeedback('err', `🛑 <b>STAGE ${stgFisico} LOTADO (${countInStage}/${cap}):</b><br>Capacidade máxima atingida! <b>OBRIGATÓRIO:</b> Bipe agora a placa do próximo Stage físico (<b>ST...</b> ou <b>SO...</b>) para continuar a conferência.`);
+      showFeedback('err', `🛑 <b>STAGE ${stgFisico} LOTADO (${countInStage}/${capTotal} paletes):</b><br>Capacidade física máxima atingida! <b>OBRIGATÓRIO:</b> Bipe agora a placa do próximo Stage físico (<b>ST...</b> ou <b>SO...</b>) para continuar a conferência.`);
       abrirModalStageLotado();
       isProcessingBarcode = false;
       return;
@@ -2866,25 +3486,29 @@ function processBarcode(rawCode) {
     if (!activeConference.stageSlots) activeConference.stageSlots = {};
     if (!activeConference.stageSlots[stgFisico]) activeConference.stageSlots[stgFisico] = {};
 
-    const countInStage = Object.values(activeConference.stageSlots[stgFisico]).filter(s => s && (s.status === 'done' || s.status === 'divergent')).length;
+    const countInStage = contarTotalPaletesNoStage(stgFisico, cap);
+    const isStageFull = verificarStageRealmenteLotado(stgFisico, cap);
 
-    if (countInStage >= cap) {
+    if (isStageFull) {
       sound.playWarning('Stage lotado. Bipe a placa do novo Stage.');
       triggerCardFlash('pulse-err');
+
+      const maxPerSlot = (window.modoEmpilhamento === '3x') ? 3 : (window.modoEmpilhamento === '2x' ? 2 : 1);
+      const capTotal = cap * maxPerSlot;
 
       activeConference.stageLotadoBloqueio = {
         stageCheio: stgFisico,
         count: countInStage,
-        cap: cap,
+        cap: capTotal,
         pendingLpn: code
       };
 
       const msgEl = document.getElementById('stageLotadoMsg');
       if (msgEl) {
-        msgEl.innerHTML = `O Stage <b>${stgFisico}</b> atingiu a capacidade física de <b>${countInStage}/${cap} vagas</b>.<br>Palete <code>${code}</code> aguardando alocação.`;
+        msgEl.innerHTML = `O Stage <b>${stgFisico}</b> atingiu a capacidade física máxima de <b>${countInStage}/${capTotal} paletes</b>.<br>Palete <code>${code}</code> aguardando alocação.`;
       }
 
-      showFeedback('err', `🛑 <b>STAGE ${stgFisico} LOTADO (${countInStage}/${cap}):</b><br>Capacidade máxima atingida! <b>OBRIGATÓRIO:</b> Bipe agora a placa do próximo Stage físico (<b>ST...</b> ou <b>SO...</b>).`);
+      showFeedback('err', `🛑 <b>STAGE ${stgFisico} LOTADO (${countInStage}/${capTotal} paletes):</b><br>Capacidade física máxima atingida! <b>OBRIGATÓRIO:</b> Bipe agora a placa do próximo Stage físico (<b>ST...</b> ou <b>SO...</b>).`);
       abrirModalStageLotado();
       isProcessingBarcode = false;
       return;
@@ -3011,9 +3635,36 @@ function finalizarAlocacaoPalete(foundPallet, stgFisico, currentSlot, locCode, i
   const stgSistemico = normalizeStageName(foundPallet.stage || (activeEmbarque.stages && activeEmbarque.stages[0]) || 'SO001');
   const isDivergent = !isMatch || hasAuditDivergence;
 
-  // 1. Grava no slot físico do stage
-  activeConference.stageSlots[stgFisico][currentSlot] = {
+  // 1. Suporte a empilhamento de paletes (duplados até 2, fracionados até 3 na mesma vaga)
+  const existingSlot = activeConference.stageSlots[stgFisico][currentSlot];
+  let paletesList = (existingSlot && existingSlot.paletes && Array.isArray(existingSlot.paletes)) ? [...existingSlot.paletes] : [];
+
+  if (existingSlot && (!existingSlot.paletes || existingSlot.paletes.length === 0) && existingSlot.palete) {
+    paletesList.push({
+      slot: currentSlot,
+      nivel: 1,
+      locCode: existingSlot.locCode || locCode,
+      palete: existingSlot.palete,
+      lpn: existingSlot.lpn || existingSlot.palete,
+      stageFisico: stgFisico,
+      stageSistemico: existingSlot.stageSistemico || stgSistemico,
+      isMatch: existingSlot.isMatch,
+      isRamification: existingSlot.isRamification,
+      status: existingSlot.status,
+      timestamp: existingSlot.timestamp,
+      auditDivergence: existingSlot.auditDivergence,
+      auditNotes: existingSlot.auditNotes || '',
+      qtdDigitada: existingSlot.qtdDigitada,
+      loteDigitado: existingSlot.loteDigitado
+    });
+  }
+
+  const existingPalIdx = paletesList.findIndex(p => p.lpn === foundPallet.palete || p.palete === foundPallet.palete);
+  const novoNivel = existingPalIdx >= 0 ? (paletesList[existingPalIdx].nivel || 1) : (paletesList.length + 1);
+
+  const novoItem = {
     slot: currentSlot,
+    nivel: novoNivel,
     locCode: locCode,
     palete: foundPallet.palete,
     lpn: foundPallet.palete,
@@ -3029,12 +3680,41 @@ function finalizarAlocacaoPalete(foundPallet, stgFisico, currentSlot, locCode, i
     loteDigitado: inputLote
   };
 
-  // 2. Grava em activeConference.conferidos
+  if (existingPalIdx >= 0) {
+    paletesList[existingPalIdx] = novoItem;
+  } else {
+    paletesList.push(novoItem);
+  }
+
+  // Grava no slot físico do stage com suporte a múltiplos níveis
+  activeConference.stageSlots[stgFisico][currentSlot] = {
+    slot: currentSlot,
+    locCode: locCode,
+    palete: foundPallet.palete,
+    lpn: foundPallet.palete,
+    paletes: paletesList,
+    totalPaletesNaVaga: paletesList.length,
+    isDuplado: paletesList.length === 2,
+    isFracionado: paletesList.length >= 3,
+    stageFisico: stgFisico,
+    stageSistemico: stgSistemico,
+    isMatch: !isDivergent,
+    isRamification: isAdjacentRamification,
+    status: isDivergent ? 'divergent' : 'done',
+    timestamp: timestampStr,
+    auditDivergence: hasAuditDivergence,
+    auditNotes: auditNotes || '',
+    qtdDigitada: inputQtd,
+    loteDigitado: inputLote
+  };
+
+  // 2. Grava em activeConference.conferidos com o nível correspondente
   activeConference.conferidos.set(foundPallet.palete, {
     timestamp: timestampStr,
     stageFisico: stgFisico,
     stage: stgFisico,
     slot: currentSlot,
+    nivel: novoNivel,
     locCode: locCode,
     isMatch: !isDivergent,
     isRamification: isAdjacentRamification,
@@ -3101,10 +3781,18 @@ function finalizarAlocacaoPalete(foundPallet, stgFisico, currentSlot, locCode, i
       sound.playRamification();
       triggerCardFlash('pulse-warn');
       showFeedback('warn', `⚡ <b>RAMIFICAÇÃO:</b> Palete <code>${foundPallet.palete}</code> alocado na extensão <b>${stgFisico}</b> (Vaga <b>${locCode}</b>)`);
+    } else if (paletesList.length === 2) {
+      sound.playSuccess();
+      triggerCardFlash('pulse-ok');
+      showFeedback('ok', `🥞 <b>PALETE DUPLADO CONFERIDO!</b> Vaga <b>${locCode}</b> (Nível 2 - Empilhado) • LPN <code>${foundPallet.palete}</code>`);
+    } else if (paletesList.length >= 3) {
+      sound.playSuccess();
+      triggerCardFlash('pulse-ok');
+      showFeedback('ok', `📦 <b>PALETE FRACIONADO CONFERIDO!</b> Vaga <b>${locCode}</b> (Nível ${paletesList.length}/3) • LPN <code>${foundPallet.palete}</code>`);
     } else {
       sound.playSuccess();
       triggerCardFlash('pulse-ok');
-      showFeedback('ok', `✔ <b>LPN ${foundPallet.palete} CONFERIDA!</b> Vaga <b>${locCode}</b>`);
+      showFeedback('ok', `✔ <b>LPN ${foundPallet.palete} CONFERIDA!</b> Vaga <b>${locCode}</b> (Nível 1 - Chão)`);
     }
 
     activeConference.historico.unshift({
@@ -3129,7 +3817,7 @@ function finalizarAlocacaoPalete(foundPallet, stgFisico, currentSlot, locCode, i
 
   // Sincronização On-Time em Tempo Real (GitHub / Nuvem / Outros Operadores)
   if (window.DHL_SYNC && typeof window.DHL_SYNC.notifyScan === 'function') {
-    window.DHL_SYNC.notifyScan(foundPallet, stgFisico, currentSlot, locCode, isMatch, isAdjacentRamification, timestampStr, hasAuditDivergence, auditNotes);
+    window.DHL_SYNC.notifyScan(foundPallet, stgFisico, currentSlot, locCode, isMatch, isAdjacentRamification, timestampStr, hasAuditDivergence, auditNotes, novoNivel);
   }
 
   setTimeout(() => {
@@ -3152,7 +3840,8 @@ function solicitarAuditoriaAmostragem(foundPallet, stgFisico, currentSlot, locCo
     isMatch,
     isAdjacentRamification,
     timestampStr,
-    amostraItem
+    amostraItem,
+    tentativa: 1
   };
 
   sound.playWarning('Amostragem de Qualidade');
@@ -3164,11 +3853,20 @@ function solicitarAuditoriaAmostragem(foundPallet, stgFisico, currentSlot, locCo
     const desc = foundPallet.desc_resumo || '';
     infoEl.innerHTML = `
       <div style="font-size: 0.85rem; color: #334155; line-height: 1.5;">
-        <div><b>LPN:</b> <code style="font-size: 0.95rem; font-weight:800; color:#0F172A;">${foundPallet.palete}</code></div>
+        <div><b>LPN Sorteada:</b> <code style="font-size: 0.95rem; font-weight:800; color:#0F172A;">${foundPallet.palete}</code></div>
         <div><b>Stage Físico:</b> ${stgFisico} • <b>Vaga Alocada:</b> <span style="color:#0284C7; font-weight:800;">${locCode}</span></div>
         <div><b>Material:</b> ${sku} ${desc ? '— ' + desc : ''}</div>
       </div>
     `;
+  }
+
+  const numTentEl = document.getElementById('amostraNumTentativa');
+  if (numTentEl) numTentEl.textContent = '1';
+
+  const errFeed = document.getElementById('amostraErroFeedback');
+  if (errFeed) {
+    errFeed.style.display = 'none';
+    errFeed.innerHTML = '';
   }
 
   const inpQtd = document.getElementById('auditInputQtd');
@@ -3211,6 +3909,7 @@ window.confirmarAmostraAudit = function(e) {
   }
 
   const { foundPallet, stgFisico, currentSlot, locCode, isMatch, isAdjacentRamification, timestampStr, amostraItem } = pendingAuditInfo;
+  const tentativaAtual = pendingAuditInfo.tentativa || 1;
 
   // Comparação com WMS
   const expectedQtd = foundPallet.qtd_total || 0;
@@ -3224,7 +3923,7 @@ window.confirmarAmostraAudit = function(e) {
 
   if (expectedQtd > 0 && inputQtd !== expectedQtd) {
     hasAuditDivergence = true;
-    divergenceReasons.push(`Qtd contada (${inputQtd}) ≠ WMS (${expectedQtd})`);
+    divergenceReasons.push(`Qtd contada (${inputQtd} cx) ≠ WMS (${expectedQtd} cx)`);
   }
 
   if (expectedLote && inputLote !== expectedLote) {
@@ -3232,15 +3931,56 @@ window.confirmarAmostraAudit = function(e) {
     divergenceReasons.push(`Lote informado (${inputLote}) ≠ WMS (${expectedLote})`);
   }
 
+  // Se houver erro e ainda não atingiu a 3ª tentativa: permite tentar novamente!
+  if (hasAuditDivergence && tentativaAtual < 3) {
+    sound.playWarning('Contagem divergente');
+    pendingAuditInfo.tentativa = tentativaAtual + 1;
+
+    const numTentEl = document.getElementById('amostraNumTentativa');
+    if (numTentEl) numTentEl.textContent = String(pendingAuditInfo.tentativa);
+
+    const errFeed = document.getElementById('amostraErroFeedback');
+    if (errFeed) {
+      errFeed.style.display = 'block';
+      errFeed.innerHTML = `
+        <div style="font-weight: 800; margin-bottom: 4px;">⚠️ Divergência na Tentativa ${tentativaAtual} de 3:</div>
+        <div>${divergenceReasons.join('<br>')}</div>
+        <div style="margin-top: 6px; font-weight: 700; color: #B91C1C;">
+          Reconte o palete fisicamente e confira a etiqueta de lote. Tentativa ${pendingAuditInfo.tentativa} liberada!
+        </div>
+      `;
+    }
+
+    if (inpQtd) inpQtd.value = '';
+    if (inpLote) inpLote.value = '';
+    setTimeout(() => {
+      if (inpQtd) inpQtd.focus();
+    }, 50);
+    return;
+  }
+
+  // Se errou na 3ª tentativa: aciona o inventário obrigatoriamente!
+  let notes = '';
+  if (hasAuditDivergence && tentativaAtual >= 3) {
+    sound.playError('Acionar Inventário');
+    notes = `🛑 BLOQUEIO 3x TENTATIVAS - ACIONAR INVENTÁRIO: ${divergenceReasons.join(' | ')}`;
+    showToast(`🛑 DIVERGÊNCIA CRÍTICA (3/3): Palete bloqueado! Chamado enviado para o Inventário.`);
+    if (typeof showFeedback === 'function') {
+      showFeedback('error', `🛑 <b>AUDITORIA AMOSTRAL FALHOU (3ª Tentativa)!</b><br>Palete ${foundPallet.palete} retido para inventário físico.`);
+    }
+  } else {
+    notes = hasAuditDivergence ? divergenceReasons.join(' | ') : '✔ Auditoria 100% Conforme';
+  }
+
   amostraItem.auditado = true;
   amostraItem.qtdContada = inputQtd;
   amostraItem.loteContado = inputLote;
   amostraItem.divergente = hasAuditDivergence;
+  amostraItem.acionarInventario = (hasAuditDivergence && tentativaAtual >= 3);
 
   const modal = document.getElementById('modalAmostragemQtdLote');
   if (modal) modal.style.display = 'none';
 
-  const notes = divergenceReasons.join(' | ');
   pendingAuditInfo = null;
 
   finalizarAlocacaoPalete(
@@ -3648,14 +4388,14 @@ function gerarPlanoGrupo(sku, lote, paletes, stagesAtivos, capPorStage, capPalet
     paraMovar.forEach((p, i) => {
       steps.push({
         num: steps.length + 1,
-        texto: `↳ Transferir/juntar LPN <code>${p.lpn}</code> (${p.qtd} cx) de <b>${p.stage || '?'}</b> → <b>${stageDestino}</b>`,
+        texto: `↳ Transferir/juntar SKU <b>${sku}</b> (${p.qtd} cx) de <b>Stage ${p.stage || '?'}</b> ➔ <b>Stage Destino ${stageDestino}</b> <span style="color:#64748B; font-size:0.78rem;">(Palete ${p.lpn})</span>`,
         ok: p.stage === stageDestino
       });
     });
   } else if (economia === 0) {
     steps.push({
       num: 1,
-      texto: `✔ Todos os ${qtdTotal} paletes já estão no Stage <b>${stageDestino}</b> — Carga já agrupada!`,
+      texto: `✔ Todos os ${qtdTotal} paletes do SKU <b>${sku}</b> já estão concentrados no Stage <b>${stageDestino}</b> — Carga já agrupada!`,
       ok: true
     });
   }
@@ -3707,7 +4447,7 @@ function gerarRoteirizacaoGlobal(grupos, emb = null) {
       
       const sequencia = plist.map((p, idx) => {
         const orderNum = idx + 1;
-        return `<b>${orderNum}º</b> Vaga <b>${p.slotLetter}</b> (<code style="color:#0284C7; font-weight:800;">${p.locCode}</code> • LPN <code>${p.lpn}</code>)`;
+        return `<b>${orderNum}º</b> Vaga <b>${p.slotLetter}</b> (<span style="color:#0F172A; font-weight:800;">SKU ${p.sku}</span> • <code style="color:#0284C7; font-weight:800;">${p.locCode}</code> • <b>${p.qtd} cx</b>)`;
       }).join(' <span style="color:#6D28D9; font-weight:900; margin:0 6px;">➔</span> ');
 
       steps.push({
@@ -3748,7 +4488,7 @@ function gerarRoteirizacaoGlobal(grupos, emb = null) {
         tipo: 'consolidacao',
         stage: dest,
         qtd: mvs.length,
-        texto: `📦 <b>Consolidação Física:</b> Mover <b>${mvs.length} palete(s)</b> de <span class="cons-step-stage-badge">${origens}</span> ➔ Stage Destino <span class="cons-step-stage-badge">${dest}</span> (${skus})`
+        texto: `📦 <b>Consolidação Física por SKU:</b> Mover <b>${mvs.length} palete(s) do ${skus}</b> de <span class="cons-step-stage-badge">${origens}</span> ➔ Stage Destino <span class="cons-step-stage-badge">${dest}</span>`
       });
     });
   }
@@ -3836,7 +4576,7 @@ function renderConsolidacao() {
       const locDisplay = p.locCode || formatStageSlotDisplay(p.stage, slotNumber);
       return `
         <tr>
-          <td><span class="cons-lpn-mono">${p.lpn}</span></td>
+          <td><b style="color:#0F172A; font-size:0.85rem;">SKU ${g.sku}</b></td>
           <td>
             <span class="cons-stage-chip" 
                   onclick="mostrarLocalizacaoStage('${p.stage}', ${slotNumber}, '${p.lpn}', '${g.sku}', '${g.lote || ''}', ${p.qtd})" 
@@ -3844,7 +4584,8 @@ function renderConsolidacao() {
               📍 ${locDisplay} (Vaga ${slotLetter}) <span class="chip-view-hint">🔍 Ver Local</span>
             </span>
           </td>
-          <td>${p.qtd} un.</td>
+          <td><b style="color:#059669;">${p.qtd} cx</b></td>
+          <td><span class="cons-lpn-mono" style="font-size:0.75rem; color:#64748B;">${p.lpn}</span></td>
           <td><span class="cons-status-badge ${statusCls}">${statusTxt}</span></td>
         </tr>
       `;
@@ -3873,7 +4614,7 @@ function renderConsolidacao() {
           <div class="cons-grupo-header-left">
             <span class="cons-grupo-icon">${icon}</span>
             <div>
-              <div class="cons-grupo-sku">SKU: ${g.sku}</div>
+              <div class="cons-grupo-sku" style="font-size: 1.05rem; font-weight: 900; color: #1E3A8A;">📦 MATERIAL / SKU: ${g.sku}</div>
               ${g.lote ? `<div class="cons-grupo-lote">Lote: ${g.lote}</div>` : ''}
               <div class="cons-grupo-desc">${g.desc}</div>
             </div>
@@ -3893,21 +4634,48 @@ function renderConsolidacao() {
           <table class="cons-paletes-table">
             <thead>
               <tr>
-                <th>LPN</th>
-                <th>Stage</th>
-                <th>Qtd</th>
+                <th>SKU / Material</th>
+                <th>Vaga / Stage</th>
+                <th>Qtd Caixas</th>
+                <th>Palete (LPN)</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>${paletesHtml}</tbody>
           </table>
           ${g.isDuplicado ? `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; margin-bottom: 12px;">
+              <div style="background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 8px; padding: 12px;">
+                <div style="font-size: 0.8rem; font-weight: 800; color: #B45309; text-transform: uppercase; margin-bottom: 6px;">
+                  📍 O QUE ESTÁ HOJE (Antes)
+                </div>
+                <div style="font-size: 0.82rem; color: #78350F; line-height: 1.4;">
+                  • <b>${g.totalPaletes}</b> paletes espalhados em <b>${g.stagesAtivos.length}</b> stage(s): <code>${g.stagesAtivos.join(', ')}</code><br>
+                  • Total de caixas: <b>${g.totalUnidades} cx</b> de SKU <b>${g.sku}</b><br>
+                  • Vagas parciais ocupadas no galpão gerando fragmentação.
+                </div>
+              </div>
+              <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 8px; padding: 12px;">
+                <div style="font-size: 0.8rem; font-weight: 800; color: #166534; text-transform: uppercase; margin-bottom: 6px;">
+                  🎯 COMO VAI FICAR (Depois da Roteirização)
+                </div>
+                <div style="font-size: 0.82rem; color: #14532D; line-height: 1.4;">
+                  • Carga concentrada em apenas <b>${g.paletesConsolidados}</b> palete(s) completo(s) no <b>Stage ${g.stagesAtivos[0]}</b><br>
+                  • <b style="color:#059669;">✔ ${g.economiaPaletes} vaga(s) física(s) liberada(s)</b> imediatamente<br>
+                  • ${g.economiaStages > 0 ? `<b style="color:#059669;">✔ Libera ${g.economiaStages} stage(s) inteiro(s)</b> para novas cargas!` : 'Otimiza 100% da cubagem do stage.'}
+                </div>
+              </div>
+            </div>
             <div class="cons-grupo-plano">
-              <div class="cons-grupo-plano-title">📐 Plano de Consolidação e Roteirização</div>
+              <div class="cons-grupo-plano-title">🚜 ROTEIRIZAÇÃO PASSO A PASSO DA EMPILHADEIRA (MHE)</div>
               <div class="cons-plano-steps">${planoHtml}</div>
               ${economiaHtml}
             </div>
-          ` : ''}
+          ` : `
+            <div style="margin-top: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px; font-size: 0.8rem; color: #475569;">
+              ✔ <b>Material Único:</b> Este SKU já está alocado sem duplicidade no Stage <b>${g.stagesAtivos[0] || '—'}</b>. Nenhuma movimentação de empilhadeira necessária.
+            </div>
+          `}
         </div>
       </div>
     `;
@@ -3963,7 +4731,11 @@ function popularSelectEmbarqueConsolidacao() {
 
 window.selecionarEmbarqueConsolidacao = function(embId) {
   if (!embId || !database || !database.embarques) return;
-  const emb = database.embarques[embId];
+  let emb = database.embarques[embId];
+  if (!emb && typeof window.localizarEmbarqueUniversal === 'function') {
+    const res = window.localizarEmbarqueUniversal(embId);
+    if (res) emb = res.embarque;
+  }
   if (!emb) return;
 
   embarqueConsolidacaoAtivo = emb;
@@ -4028,8 +4800,19 @@ window.abrirConsolidacaoTela = function(embId = null) {
   showScreen('viewConsolidacao');
   renderConsolidacao();
   setTimeout(() => {
-    if (window.StageMapConsolidacao && typeof window.StageMapConsolidacao.refresh === 'function') {
-      window.StageMapConsolidacao.refresh(true);
+    const el = document.getElementById('consMapRoot');
+    if (el && window.StageMap) {
+      if (!window.StageMapConsolidacao) {
+        window.StageMapConsolidacao = window.StageMap.create();
+        window.StageMapConsolidacao.mount(el, {
+          loadData: () => window.StageMapConsolidacaoAdapter(),
+          planner: true,
+          legenda: true,
+          positions: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+        });
+      } else {
+        window.StageMapConsolidacao.refresh(true);
+      }
     }
   }, 100);
 };
@@ -4827,6 +5610,7 @@ window.openHistoryModal = openHistoryModal;
    ========================================================= */
 function initApp() {
   loadData();
+  updateModoEmpilhamentoUI();
 
   const inputEmb = document.getElementById('inputEmbarque');
   const inputOp = document.getElementById('inputOperador');
@@ -5022,69 +5806,83 @@ function initApp() {
 /* =========================================================
    ADAPTADOR OFICIAL PARA O MAPA DE STAGES 2D/3D (StageMap)
    ========================================================= */
-window.StageMapAdapter = function() {
-  const masterList = (typeof getAllMasterStages === 'function' ? getAllMasterStages() : MASTER_STAGES) || [];
-  if (!masterList || masterList.length === 0) return { stages: [] };
+window.StageMapAdapter = (function () {
+  // Monta o pátio a partir do estado REAL: base (Power BI / planilha) + bipagens (conferência ativa e parciais de todos os embarques).
+  // Cada palete vai para o stage/vaga físicos onde foi bipado; quem ainda não foi bipado aparece no stage sistêmico (DSTLOC) como "aguardando".
+  let cache = { sig: null, out: null };
+  const rowOf = (o) => ({ lpn: o.lpn, stage: o.stage || '', vaga: o.vaga == null ? '' : o.vaga, embarque: o.embarque == null ? '' : String(o.embarque), status: o.status, sku: o.sku || '', lote: o.lote || '', qtd: o.qtd || '' });
 
-  const stages = masterList.map(stgCode => {
-    const info = getDashboardStageInfo(stgCode);
-    const num = parseInt(stgCode.replace(/\D/g, ''), 10) || 0;
-    let band = 0;
-    if (num >= 40 && num <= 74) band = 1;
-    else if (num >= 129) band = 2;
+  return function () {
+    if (!database || !database.embarques) return null;
+    const ls = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+    const partialsRaw = ls(STORAGE_PARTIAL_CONFERENCES_KEY), capsRaw = ls(STORAGE_STAGE_CAPACITIES_KEY);
+    const ac = activeConference || {};
+    const pbi = window.POWERBI_SYNC && window.POWERBI_SYNC.status ? window.POWERBI_SYNC.status() : null;
+    const sig = [pbi && pbi.version, Object.keys(database.embarques).length, partialsRaw.length, partialsRaw.slice(-200), capsRaw,
+      ac.embarqueId, ac.conferidos ? ac.conferidos.size : 0, (ac.historico || []).length, ac.activeSlot, ac.currentPhysicalStage].join('§');
+    if (cache.out && cache.sig === sig && cache.db === database) return cache.out;
 
-    const isBlk = (typeof window.isStageBlocked === 'function' && window.isStageBlocked(stgCode)) || false;
-    const posList = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    const slots = posList.map((pos, idx) => {
-      const slotNum = idx + 1;
-      const slotData = (info.slots && slotNum <= info.palletsInThisStage) ? info.slots[slotNum] : null;
-      let status = 'livre';
-
-      if (isBlk) {
-        status = 'divergencia';
-      } else if (!info.embarque || slotNum > info.palletsInThisStage) {
-        status = 'livre';
-      } else if (info.blockedSlots.includes(slotNum)) {
-        status = 'divergencia';
-      } else if (slotData && slotData.status === 'divergent') {
-        status = 'divergencia';
-      } else if (slotData && slotData.status === 'done') {
-        status = 'conferido';
-      } else if (info.status === 'conferido') {
-        status = 'conferido';
-      } else if (info.status === 'parcial') {
-        status = slotNum <= info.conferidosCount ? 'conferido' : 'aguardando';
-      } else {
-        status = 'aguardando';
-      }
-
-      return {
-        pos: pos,
-        status: status,
-        lpn: slotData ? (slotData.lpn || '') : '',
-        sku: slotData ? (slotData.sku || '') : '',
-        desc_produto: (slotData && slotData.desc_produto) || '',
-        lote: (slotData && slotData.lote) || '',
-        qtd: (slotData && slotData.qtd) || 0
-      };
-    });
-
-    return {
-      id: stgCode,
-      band: 0, // Um ao lado do outro sequenciado mesmo (sem divisão em grupos)
-      embarque: info.embarque ? String(info.embarque.embarque) : null,
-      transportadora: info.embarque ? (info.embarque.transportadora || '') : '',
-      placa: info.embarque ? (info.embarque.placa || '') : '',
-      horario_doca: info.embarque ? (info.embarque.horario_doca || '') : '',
-      isBlocked: isBlk,
-      slots: slots
+    const conf = new Map(), phys = new Map(), ocupadas = new Set();
+    const addSession = (s, embId) => {
+      if (!s) return;
+      (s.conferidos || []).forEach(en => { if (Array.isArray(en)) conf.set(en[0], en[1] || {}); });
+      Object.keys(s.stageSlots || {}).forEach(stg => {
+        const slots = s.stageSlots[stg] || {};
+        Object.keys(slots).forEach(k => {
+          const sl = slots[k] || {};
+          const list = Array.isArray(sl.paletes) && sl.paletes.length ? sl.paletes : ((sl.lpn || sl.palete) ? [sl] : []);
+          list.forEach(p => {
+            const lpn = p.lpn || p.palete; if (!lpn) return;
+            phys.set(lpn, { stage: stg, slot: parseInt(k, 10) || sl.slot, status: p.status || sl.status, emb: embId });
+            ocupadas.add(normalizeStageName(stg) + '|' + (parseInt(k, 10) || sl.slot));
+          });
+        });
+      });
     };
-  });
+    let partials = {};
+    try { partials = JSON.parse(partialsRaw || '{}'); } catch (e) {}
+    Object.keys(partials).forEach(id => addSession(partials[id], id));
+    if (ac.embarqueId) addSession({ conferidos: ac.conferidos ? Array.from(ac.conferidos.entries()) : [], stageSlots: ac.stageSlots }, ac.embarqueId);
 
-  // O novo stage_map.js já inverte a ordem (inicioNoLado: 'direita'), então entregamos em ordem crescente
-  stages.sort((a, b) => (parseInt(a.id.replace(/\D/g, ''), 10) || 0) - (parseInt(b.id.replace(/\D/g, ''), 10) || 0));
-  return { stages: stages };
-};
+    const rows = [], naBase = new Set();
+    Object.keys(database.embarques).forEach(k => {
+      const e = database.embarques[k];
+      if (!e || e.embarque !== k) return; // ignora aliases
+      (e.paletes || []).forEach(p => {
+        const lpn = p.palete; if (!lpn) return;
+        naBase.add(lpn);
+        const c = conf.get(lpn), ph = phys.get(lpn);
+        const div = (c && (c.isDivergent || c.status === 'divergent')) || (ph && ph.status === 'divergent');
+        const ok = (c && c.status === 'done') || (ph && ph.status === 'done');
+        rows.push(rowOf({
+          lpn: lpn, embarque: e.embarque,
+          stage: (ph && ph.stage) || (c && (c.stageFisico || c.stage)) || p.stage,
+          vaga: ph ? ph.slot : (c && c.slot),
+          status: div ? 'divergencia' : ok ? 'conferido' : 'aguardando',
+          sku: p.sku_resumo, lote: p.itens && p.itens[0] && p.itens[0].lote, qtd: p.qtd_total
+        }));
+      });
+    });
+    // bipados que não existem na base (material não planejado)
+    phys.forEach((ph, lpn) => { if (!naBase.has(lpn)) rows.push(rowOf({ lpn: lpn, stage: ph.stage, vaga: ph.slot, embarque: ph.emb, status: 'divergencia', sku: 'Não planejado' })); });
+    // vaga que está sendo bipada agora
+    if (ac.embarqueId && ac.currentPhysicalStage && ac.activeSlot && !ocupadas.has(normalizeStageName(ac.currentPhysicalStage) + '|' + ac.activeSlot)) {
+      rows.push(rowOf({ lpn: 'Próxima vaga', stage: ac.currentPhysicalStage, vaga: ac.activeSlot, embarque: ac.embarqueId, status: 'ativo' }));
+    }
+
+    const d = window.StageMap.fromRows(rows, { preencher: false });
+    // capacidade configurada no app (6/8/10) tem prioridade sobre a planta
+    let caps = {};
+    try { caps = JSON.parse(capsRaw || '{}'); } catch (e) {}
+    const capN = {};
+    Object.keys(caps).forEach(k => { capN[normalizeStageName(k)] = +caps[k]; });
+    d.stages.forEach(s => { const c = capN[normalizeStageName(s.id)]; if (c) s.capacidade = c; });
+
+    d.fonte = pbi && pbi.ts ? 'Power BI ' + new Date(pbi.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Base local';
+    cache = { sig: sig, out: d, db: database };
+    return d;
+  };
+})();
 
 /* =========================================================
    OPERAÇÃO EM 3D: PÁTIO, DOCAS E PALETES ISOMÉTRICOS
@@ -5187,6 +5985,8 @@ window.StageMapConsolidacaoAdapter = function() {
       }
 
       if (sessSlot && sessSlot.status === 'done') {
+        const isDup = sessSlot.isDuplado || (sessSlot.paletes && sessSlot.paletes.length === 2);
+        const isFrac = sessSlot.isFracionado || (sessSlot.paletes && sessSlot.paletes.length >= 3);
         return {
           pos: posLetter,
           status: 'conferido',
@@ -5194,7 +5994,10 @@ window.StageMapConsolidacaoAdapter = function() {
           sku: sessSlot.sku || (pal ? pal.sku_resumo : ''),
           lote: sessSlot.lote || '',
           qtd: sessSlot.qtd || 30,
-          cap: 40
+          cap: 40,
+          duplado: isDup,
+          fracionado: isFrac,
+          paletes: sessSlot.paletes || []
         };
       }
 
@@ -5271,3 +6074,119 @@ if (document.readyState === 'loading') {
 } else {
   initApp();
 }
+
+/* =========================================================
+   PONTE PARA OS MÓDULOS EXTERNOS (sync.js, powerbi_sync.js, stage_map.js)
+   database / activeConference / activeEmbarque são `let` deste arquivo e NÃO ficam em window.
+   Sem esta ponte, window.database e window.activeConference nos outros arquivos eram undefined:
+   bipagens de outros aparelhos e bases do Power BI não chegavam à tela.
+   ========================================================= */
+[['database', () => database, v => { database = v; MASTER_STAGES = getAllMasterStages(); }],
+ ['activeConference', () => activeConference, v => { activeConference = v; }],
+ ['activeEmbarque', () => activeEmbarque, v => { activeEmbarque = v; }]
+].forEach(([name, get, set]) => {
+  try { Object.defineProperty(window, name, { get: get, set: set, configurable: true }); } catch (e) { console.warn('Ponte window.' + name, e); }
+});
+
+window.toggleAppFullscreen = function() {
+  if (!document.fullscreenElement) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    } else if (document.documentElement.webkitRequestFullscreen) {
+      document.documentElement.webkitRequestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  }
+};
+
+/* =========================================================
+   INTEGRAÇÃO LIVE: EXTRAIR CSV DO SHAREPOINT VIA API REST
+   ========================================================= */
+window.extrairCsvSharePoint = async function() {
+  const btn = document.getElementById('btnExtrairSharePointApi');
+  const originalText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Extraindo do CSV...';
+  }
+
+  if (typeof showToast === 'function') {
+    showToast('Iniciando extração do CSV do SharePoint via API...');
+  }
+
+  try {
+    const res = await fetch('/api/extrair-csv?include_data=1', { cache: 'no-cache' });
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      throw new Error(data.message || data.error || 'Falha ao extrair CSV.');
+    }
+
+    if (data.database && data.database.embarques) {
+      window.database = data.database;
+      try {
+        localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(data.database));
+      } catch (e) {}
+    } else {
+      const r2 = await fetch('stage_data.json?t=' + Date.now());
+      if (r2.ok) {
+        const j2 = await r2.json();
+        window.database = j2;
+        try { localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(j2)); } catch (e) {}
+      }
+    }
+
+    if (typeof loadData === 'function') loadData();
+    if (typeof updateBaseInfoUI === 'function') updateBaseInfoUI();
+    if (typeof renderYardGrid === 'function') renderYardGrid();
+    if (typeof renderDashboard === 'function' && document.getElementById('viewDashboard')?.style.display === 'block') {
+      renderDashboard();
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(`✔ Base atualizada! ${data.total_embarques} embarques e ${data.total_paletes} paletes carregados.`, 5000);
+    }
+
+    const feedback = document.getElementById('uploadFeedback');
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.innerHTML = `
+        <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 12px; color: #166534; font-size: 0.85rem; margin-top: 10px;">
+          <b>✔ Extração do CSV Concluída em ${data.tempo_processamento_ms || 0}ms!</b><br>
+          • Total de Embarques: <b>${data.total_embarques}</b><br>
+          • Total de Paletes: <b>${data.total_paletes}</b><br>
+          • Total de Peças: <b>${data.total_pecas || 0}</b><br>
+          • Stages Mapeados: <b>${data.total_stages || 0}</b><br>
+          • Origem: <code>${data.arquivo || 'SharePoint ADHOC_80.csv'}</code>
+        </div>
+      `;
+    }
+  } catch (err) {
+    console.error('Erro na extração do CSV:', err);
+    if (typeof showToast === 'function') {
+      showToast('❌ Erro: ' + err.message, 6000);
+    }
+    const feedback = document.getElementById('uploadFeedback');
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.innerHTML = `
+        <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 8px; padding: 12px; color: #991B1B; font-size: 0.85rem; margin-top: 10px;">
+          <b>❌ Falha na Extração do CSV:</b> ${err.message}<br>
+          <small>Verifique se o SharePoint está sincronizado no PC ou se o servidor Node.js está ativo.</small>
+        </div>
+      `;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+};
+
+

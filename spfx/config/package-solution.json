@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "dhl-conferencia-stage-client-side-solution",
+    "id": "a92c31e4-398d-4b47-b892-0b29c991e571",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "DHL Supply Chain • P&G Itatiaia",
+      "websiteUrl": "https://www.dhl.com",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.18.0"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "DHL Conferência de Stage (Full Screen Tailwind)"
+      },
+      "longDescription": {
+        "default": "Solução corporativa de Conferência de Stage, Alocação e Auditoria P&G Itatiaia para Tablets e Coletores."
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "dhl-conferencia-stage Feature",
+        "description": "The feature that activates elements of the dhl-conferencia-stage solution.",
+        "id": "77e311f4-34dc-4fa7-88eb-bb08b6e6761f",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/dhl-conferencia-stage.sppkg"
+  }
+}

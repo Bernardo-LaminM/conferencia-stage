@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DHL • Central de Extração e Teste de Dados (Power BI / WMS)</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --dhl-red: #D40511;
+      --dhl-yellow: #FFCC00;
+      --dhl-dark: #1E293B;
+      --dhl-blue: #003DA5;
+      --dhl-gray: #F8FAFC;
+      --dhl-border: #E2E8F0;
+      --dhl-green: #10B981;
+    }
+
+    body {
+      background: #F1F5F9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: var(--dhl-dark);
+    }
+
+    .extract-header {
+      background: #FFFFFF;
+      border-bottom: 3px solid var(--dhl-yellow);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .extract-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .extract-logo {
+      height: 38px;
+      width: auto;
+    }
+
+    .extract-container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+
+    .banner-hero {
+      background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+      color: #FFFFFF;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+      border-left: 6px solid var(--dhl-red);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .tab-nav {
+      display: flex;
+      gap: 8px;
+      border-bottom: 2px solid var(--dhl-border);
+      margin-bottom: 20px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      padding: 12px 20px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #64748B;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--dhl-blue);
+      background: rgba(0, 61, 165, 0.04);
+      border-radius: 6px 6px 0 0;
+    }
+
+    .tab-btn.active {
+      color: var(--dhl-blue);
+      border-bottom-color: var(--dhl-blue);
+      background: #FFFFFF;
+      border-radius: 6px 6px 0 0;
+    }
+
+    .card-panel {
+      background: #FFFFFF;
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px solid var(--dhl-border);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      margin-bottom: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 14px;
+      border: 1.5px solid var(--dhl-border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #0F172A;
+      background: #F8FAFC;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--dhl-blue);
+      background: #FFFFFF;
+    }
+
+    .btn-action {
+      background: var(--dhl-blue);
+      color: #FFFFFF;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(0, 61, 165, 0.3);
+    }
+
+    .btn-action:hover {
+      background: #002B7A;
+      transform: translateY(-1px);
+    }
+
+    .btn-action-red {
+      background: var(--dhl-red);
+      box-shadow: 0 2px 6px rgba(212, 5, 17, 0.3);
+    }
+    .btn-action-red:hover {
+      background: #B0040E;
+    }
+
+    .btn-action-green {
+      background: #059669;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+    }
+    .btn-action-green:hover {
+      background: #047857;
+    }
+
+    .btn-secondary {
+      background: #FFFFFF;
+      color: #1E293B;
+      border: 1.5px solid var(--dhl-border);
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: #F8FAFC;
+      border-color: #CBD5E1;
+    }
+
+    .drop-zone {
+      border: 2px dashed #94A3B8;
+      border-radius: 12px;
+      background: #F8FAFC;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--dhl-blue);
+      background: #EFF6FF;
+    }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .kpi-box {
+      background: #F8FAFC;
+      border: 1px solid var(--dhl-border);
+      border-radius: 8px;
+      padding: 16px;
+      border-left: 4px solid var(--dhl-blue);
+    }
+
+    .kpi-lbl {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+    }
+
+    .kpi-val {
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: #0F172A;
+      margin-top: 4px;
+    }
+
+    .log-terminal {
+      background: #0F172A;
+      color: #38BDF8;
+      border-radius: 10px;
+      padding: 16px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.82rem;
+      max-height: 250px;
+      overflow-y: auto;
+      line-height: 1.6;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .log-line {
+      margin-bottom: 4px;
+      border-bottom: 1px dashed rgba(255,255,255,0.06);
+      padding-bottom: 2px;
+    }
+    .log-time { color: #94A3B8; margin-right: 8px; }
+    .log-ok { color: #4ADE80; font-weight: bold; }
+    .log-err { color: #F87171; font-weight: bold; }
+    .log-warn { color: #FBBF24; }
+
+    .data-table-container {
+      max-height: 380px;
+      overflow-y: auto;
+      border: 1px solid var(--dhl-border);
+      border-radius: 8px;
+      background: #FFFFFF;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      text-align: left;
+    }
+
+    .data-table th {
+      background: #F8FAFC;
+      color: #475569;
+      font-weight: 800;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--dhl-border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .data-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #F1F5F9;
+      color: #1E293B;
+    }
+
+    .data-table tr:hover {
+      background: #F8FAFC;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <header class="extract-header">
+    <div class="extract-brand">
+      <img src="dhl_logo.svg" alt="DHL" class="extract-logo" onerror="this.onerror=null; this.src='dhl_logo.png';">
+      <div style="border-left: 2px solid var(--dhl-border); height: 28px; margin: 0 4px;"></div>
+      <div>
+        <h1 style="font-size: 1.15rem; font-weight: 900; margin: 0; color: #D40511;">Ferramenta de Extração de Dados</h1>
+        <div style="font-size: 0.74rem; color: #64748B;">P&amp;G Itatiaia • Validação, Diagnóstico e Geração de Base (Power BI / Excel)</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <a href="index.html" class="btn-action" style="text-decoration: none; padding: 9px 16px; font-size: 0.88rem; background: var(--dhl-red);">
+        📦 Abrir Conferência
+      </a>
+      <a href="sincronizador.html" class="btn-secondary" style="text-decoration: none; padding: 9px 16px; font-size: 0.88rem;">
+        📡 Sincronizador Live
+      </a>
+    </div>
+  </header>
+
+  <main class="extract-container">
+
+    <!-- Hero Banner -->
+    <section class="banner-hero">
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+          <span style="font-size: 1.2rem;">🔬</span>
+          <span style="font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; font-size: 0.82rem; color: #38BDF8;">Ambiente Dedicado de Teste & Extração</span>
+        </div>
+        <h2 style="margin: 0; font-size: 1.5rem; font-weight: 900;">Extrair & Gerar Base Oficial da Expedição</h2>
+        <p style="margin: 6px 0 0 0; font-size: 0.85rem; opacity: 0.85; max-width: 780px;">
+          Teste os diferentes métodos de extração de dados da view <code>[itatiaia].[SHIPPING_PCKWRK_VIEW_SIMPLIFICADA]</code>. 
+          Se a API direta necessitar de token, você pode colar os dados do DAX Query View ou soltar o arquivo Excel para processamento instantâneo.
+        </p>
+      </div>
+      <div style="text-align: right;">
+        <span id="badgeStatusGeral" style="background: rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.3);">
+          ⚡ Sistema Pronto
+        </span>
+      </div>
+    </section>
+
+    <!-- Navegação de Abas -->
+    <div class="tab-nav">
+      <button type="button" class="tab-btn active" onclick="selecionarAba('tabApi')">
+        <span>⚡</span> 1. Power BI REST API (Live)
+      </button>
+      <button type="button" class="tab-btn" onclick="selecionarAba('tabColar')">
+        <span>📋</span> 2. Colar DAX / JSON / Tabela
+      </button>
+      <button type="button" class="tab-btn" onclick="selecionarAba('tabExcel')">
+        <span>📁</span> 3. Arquivo Excel / CSV (AD HOC 80)
+      </button>
+      <button type="button" class="tab-btn" onclick="selecionarAba('tabLocal')">
+        <span>🖥️</span> 4. Servidor Local (/api/sync-powerbi)
+      </button>
+    </div>
+
+    <!-- ========================================================
+         ABA 1: POWER BI REST API (LIVE)
+         ======================================================== -->
+    <section id="tabApi" class="card-panel">
+      <h3 style="margin-top:0; font-size: 1.1rem; color: #003DA5;">⚡ Extração Direta via REST API do Power BI</h3>
+      <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 20px;">
+        Executa a query DAX diretamente no dataset <b>AD HOC 80</b> da P&amp;G através da API oficial da Microsoft (<code>executeQueries</code>).
+      </p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="form-group">
+          <label class="form-label">Workspace ID (Group):</label>
+          <input type="text" id="apiWorkspaceId" class="form-input" value="f0810a12-fd37-4f7a-ba46-4a447e425649">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dataset ID (AD HOC 80):</label>
+          <input type="text" id="apiDatasetId" class="form-input" value="5939ef54-f0ca-4d0b-8821-f8cfc989bf80">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">
+          🔑 Bearer Token (Microsoft Entra ID / Azure AD):
+          <span style="font-weight: normal; color: #64748B; font-size: 0.78rem;">(Se tiver um token gerado pelo portal ou PowerShell)</span>
+        </label>
+        <input type="password" id="apiBearerToken" class="form-input" placeholder="Cole aqui: eyJ0eXAiOiJKV1QiLCJh... (Deixe em branco para testar chamada direta)">
+      </div>
+
+      <!-- Guia Rápido quando não houver Token -->
+      <div style="background: #EFF6FF; border: 1.5px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+        <div style="font-size: 0.85rem; font-weight: 800; color: #1E40AF; margin-bottom: 6px;">
+          💡 Não possui um Bearer Token neste momento?
+        </div>
+        <div style="font-size: 0.8rem; color: #1E3A8A; line-height: 1.5; margin-bottom: 10px;">
+          Como o Power BI corporativo é protegido pela Microsoft, a chamada direta sem token retorna <b>HTTP 403 Forbidden</b>. Você não precisa se preocupar com tokens: basta copiar os dados do Power BI e colar na Aba 2, ou soltar a planilha do AD HOC 80 na Aba 3!
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-action" style="padding: 7px 14px; font-size: 0.8rem; background: #003DA5;" onclick="selecionarAba('tabColar')">
+            📋 Ir para Aba 2 (Colar DAX / Tabela sem Token)
+          </button>
+          <button type="button" class="btn-secondary" style="padding: 7px 14px; font-size: 0.8rem;" onclick="selecionarAba('tabExcel')">
+            📁 Ir para Aba 3 (Soltar Planilha Excel)
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Consulta DAX a ser executada:</label>
+        <textarea id="apiDaxQuery" class="form-textarea" rows="5" style="font-family: monospace; font-size: 0.8rem;">EVALUATE
+SELECTCOLUMNS(
+  'itatiaia SHIPPING_PCKWRK_VIEW_SIMPLIFICADA',
+  "car_move_id", [car_move_id],
+  "ORDNUM", [ORDNUM],
+  "PALLET_ID", [PALLET_ID],
+  "DSTLOC", [DSTLOC],
+  "PRTNUM", [PRTNUM],
+  "QTD_CAIXAS", [QTD_CAIXAS]
+)</textarea>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn-action" id="btnTestarApi" onclick="executarExtracaoApi()">
+          <span>▶️</span> Testar e Extrair da API
+        </button>
+        <button type="button" class="btn-secondary" onclick="limparCamposApi()">
+          Limpar
+        </button>
+        <span style="font-size: 0.78rem; color: #64748B;">
+          💡 Nota: Em navegadores padrão, chamadas diretas sem token ou com CORS restrito exibirão o diagnóstico com instruções no log.
+        </span>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         ABA 2: COLAR DAX / JSON / TABELA
+         ======================================================== -->
+    <section id="tabColar" class="card-panel" style="display: none;">
+      <h3 style="margin-top:0; font-size: 1.1rem; color: #003DA5;">📋 Extração por Colagem Direta (Zero Dependência de Token)</h3>
+      <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 20px;">
+        Abra o relatório ou DAX Query View no Power BI Desktop / Web, copie os dados e cole abaixo. O sistema aceita <b>JSON da API</b>, <b>Tabela copiada do Power BI (com tabulações)</b> ou <b>CSV</b>.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Cole aqui os dados copiados:</label>
+        <textarea id="colarInputTexto" class="form-textarea" rows="10" style="font-family: monospace; font-size: 0.8rem;" placeholder="Cole aqui o JSON retornado pela API ou a tabela copiada com as colunas: car_move_id, PALLET_ID, DSTLOC, PRTNUM, QTD_CAIXAS..."></textarea>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn-action btn-action-green" onclick="processarDadosColados()">
+          <span>🚀</span> Converter e Gerar Base Oficial
+        </button>
+        <button type="button" class="btn-secondary" onclick="colarExemploTeste()">
+          Carregar Exemplo de Teste
+        </button>
+        <button type="button" class="btn-secondary" onclick="document.getElementById('colarInputTexto').value=''">
+          Limpar
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         ABA 3: ARQUIVO EXCEL / CSV (AD HOC 80)
+         ======================================================== -->
+    <section id="tabExcel" class="card-panel" style="display: none;">
+      <h3 style="margin-top:0; font-size: 1.1rem; color: #003DA5;">📁 Extração a Partir de Arquivo Excel / Planilha WMS</h3>
+      <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 20px;">
+        Solte a planilha do <b>AD HOC 80</b> (<code>.xlsx</code>, <code>.xls</code> ou <code>.csv</code>) ou a <b>Guia de Conferência</b> exportada do WMS. O processamento é instantâneo e 100% offline.
+      </p>
+
+      <div id="dropZoneExcel" class="drop-zone" onclick="document.getElementById('fileInputExcel').click()">
+        <div style="font-size: 2.8rem; margin-bottom: 12px;">📊</div>
+        <div style="font-size: 1.1rem; font-weight: 800; color: #1E293B;">Arraste e solte a planilha aqui</div>
+        <div style="font-size: 0.85rem; color: #64748B; margin-top: 6px;">Ou clique para selecionar (xlsx, xls, csv)</div>
+        <input type="file" id="fileInputExcel" accept=".xlsx, .xls, .csv" style="display: none;" onchange="aoSelecionarArquivoExcel(event)">
+      </div>
+
+      <div style="display: flex; justify-content: center; margin-top: 16px; gap: 12px; flex-wrap: wrap;">
+        <a href="https://pgone.sharepoint.com/:x:/s/ServidorDHL/IQDMso4jCIUAQ?download=1" target="_blank" class="btn-action" style="background: #003DA5; text-decoration: none;">
+          <span>☁️</span> Baixar ADHOC_80.csv do SharePoint Nuvem
+        </a>
+        <button type="button" class="btn-action" style="background: #059669;" onclick="carregarBaseOfflineExistente()">
+          <span>📥</span> Carregar Base Offline Existente no Sistema (stage_data.js)
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         ABA 4: SERVIDOR LOCAL
+         ======================================================== -->
+    <section id="tabLocal" class="card-panel" style="display: none;">
+      <h3 style="margin-top:0; font-size: 1.1rem; color: #003DA5;">🖥️ Extração via Servidor Local Backend (/api/sync-powerbi)</h3>
+      <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 20px;">
+        Se você estiver rodando o servidor local (ex: via <code>servidor_web.ps1</code> na porta 8080), ele executa a autenticação Entra ID e busca os dados sem limitações de navegador.
+      </p>
+
+      <div style="background: #F8FAFC; border: 1px solid var(--dhl-border); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 6px;">Endpoint Local:</div>
+        <code id="txtLocalEndpoint" style="color: #003DA5; font-size: 0.9rem;">/api/sync-powerbi</code>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="button" class="btn-action" onclick="testarServidorLocal()">
+          <span>⚡</span> Chamar Servidor Local
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         PAINEL DE RESULTADOS & EXPORTAÇÕES
+         ======================================================== -->
+    <section id="sectionResultados" class="card-panel" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.15rem; color: #0F172A; font-weight: 900;">
+            📊 Dados Extraídos com Sucesso
+          </h3>
+          <span id="txtOrigemExtraida" style="font-size: 0.78rem; color: #64748B;">Origem dos dados</span>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-action btn-action-green" onclick="salvarNaMemoriaDoNavegador()" title="Aplica diretamente no sistema de conferência deste navegador">
+            <span>💾</span> Aplicar no Sistema
+          </button>
+          <button type="button" class="btn-action" onclick="baixarStageDataJs()" title="Baixar arquivo stage_data.js para colocar na pasta oficial">
+            <span>📥</span> Baixar stage_data.js
+          </button>
+          <button type="button" class="btn-action" style="background: #475569;" onclick="baixarStageDataJson()" title="Baixar JSON">
+            <span>📥</span> Baixar stage_data.json
+          </button>
+          <button type="button" class="btn-secondary" onclick="baixarPlanilhaExcel()" title="Baixar planilha Excel formatada">
+            <span>📊</span> Baixar Excel (.xlsx)
+          </button>
+          <button type="button" class="btn-action btn-action-red" onclick="transmitirOnTime()" title="Transmitir para todos os coletores e computadores conectados na rede via MQTT">
+            <span>📡</span> Transmitir Live (On-Time)
+          </button>
+        </div>
+      </div>
+
+      <!-- KPIs da Extração -->
+      <div class="kpi-row">
+        <div class="kpi-box">
+          <div class="kpi-lbl">🚚 Embarques</div>
+          <div id="resEmbarques" class="kpi-val">0</div>
+        </div>
+        <div class="kpi-box" style="border-left-color: var(--dhl-red);">
+          <div class="kpi-lbl">📦 Paletes (LPNs)</div>
+          <div id="resPaletes" class="kpi-val">0</div>
+        </div>
+        <div class="kpi-box" style="border-left-color: #059669;">
+          <div class="kpi-lbl">🔢 Caixas / Peças</div>
+          <div id="resPecas" class="kpi-val">0</div>
+        </div>
+        <div class="kpi-box" style="border-left-color: #D97706;">
+          <div class="kpi-lbl">🏷️ SKUs Distintos</div>
+          <div id="resSkus" class="kpi-val">0</div>
+        </div>
+        <div class="kpi-box" style="border-left-color: #7C3AED;">
+          <div class="kpi-lbl">📍 Stages Mapeados</div>
+          <div id="resStages" class="kpi-val">0</div>
+        </div>
+      </div>
+
+      <!-- Prévia dos Dados com Busca -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-size: 0.85rem; font-weight: 700; color: #475569;">Prévia dos Primeiros Registros:</span>
+        <input type="text" id="inputBuscaPrevia" class="form-input" style="width: 260px; padding: 6px 10px; font-size: 0.8rem;" placeholder="Buscar por Embarque, LPN ou Stage..." oninput="filtrarPrevia()">
+      </div>
+
+      <div class="data-table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Embarque</th>
+              <th>Palete (LPN)</th>
+              <th>Stage</th>
+              <th>Order Num</th>
+              <th>SKU</th>
+              <th>Descrição do Produto</th>
+              <th>Lote</th>
+              <th>Qtd Caixas</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabelaPrevia"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         CONSOLE DE LOG & DIAGNÓSTICO
+         ======================================================== -->
+    <section>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="font-size: 0.85rem; font-weight: 800; color: #475569; text-transform: uppercase;">
+          📟 Log de Diagnóstico e Execução
+        </div>
+        <button type="button" style="background: none; border: none; color: #64748B; font-size: 0.75rem; cursor: pointer; text-decoration: underline;" onclick="document.getElementById('logTerminalList').innerHTML=''">
+          Limpar Log
+        </button>
+      </div>
+
+      <div id="logTerminalList" class="log-terminal">
+        <div class="log-line">
+          <span class="log-time">[${new Date().toLocaleTimeString('pt-BR')}]</span>
+          <span>Central de extração inicializada. Escolha um dos 4 métodos acima para testar.</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bibliotecas Locais com Fallback CDN -->
+  <script src="xlsx.full.min.js"></script>
+  <script src="mqtt.min.js"></script>
+  <script>if (typeof mqtt === 'undefined') { document.write('<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"><\/script>'); }</script>
+  <script src="stage_data.js"></script>
+
+  <script>
+    /* =========================================================
+       ESTADO GLOBAL DA FERRAMENTA DE EXTRAÇÃO
+       ========================================================= */
+    let dadosExtraidosGlobal = null;
+    let linhasAchatadasGlobal = [];
+    let mqttClient = null;
+
+    function addLog(msg, tipo = 'info') {
+      const box = document.getElementById('logTerminalList');
+      if (!box) return;
+      const t = new Date().toLocaleTimeString('pt-BR');
+      const div = document.createElement('div');
+      div.className = 'log-line';
+      let classeTipo = '';
+      if (tipo === 'ok') classeTipo = 'log-ok';
+      else if (tipo === 'err') classeTipo = 'log-err';
+      else if (tipo === 'warn') classeTipo = 'log-warn';
+
+      div.innerHTML = `<span class="log-time">[${t}]</span> <span class="${classeTipo}">${msg}</span>`;
+      box.insertBefore(div, box.firstChild);
+    }
+
+    function selecionarAba(idAba) {
+      document.querySelectorAll('.card-panel').forEach(card => {
+        if (card.id !== 'sectionResultados') card.style.display = 'none';
+      });
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+      const aba = document.getElementById(idAba);
+      if (aba) aba.style.display = 'block';
+
+      const botoes = document.querySelectorAll('.tab-btn');
+      if (idAba === 'tabApi') botoes[0]?.classList.add('active');
+      if (idAba === 'tabColar') botoes[1]?.classList.add('active');
+      if (idAba === 'tabExcel') botoes[2]?.classList.add('active');
+      if (idAba === 'tabLocal') botoes[3]?.classList.add('active');
+    }
+
+    /* =========================================================
+       MÉTODO 1: POWER BI REST API DIRECT TEST
+       ========================================================= */
+    async function executarExtracaoApi() {
+      const workspaceId = document.getElementById('apiWorkspaceId').value.trim();
+      const datasetId = document.getElementById('apiDatasetId').value.trim();
+      const token = document.getElementById('apiBearerToken').value.trim();
+      const daxQuery = document.getElementById('apiDaxQuery').value.trim();
+      const btn = document.getElementById('btnTestarApi');
+
+      if (!workspaceId || !datasetId) {
+        alert('Informe o Workspace ID e Dataset ID.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Conectando à API Power BI...';
+      addLog(`Disparando chamada REST API para Workspace: ${workspaceId} | Dataset: ${datasetId}...`);
+
+      const url = `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/datasets/${datasetId}/executeQueries`;
+
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        addLog('Token de autenticação Bearer anexado ao cabeçalho.');
+      } else {
+        addLog('Aviso: Nenhum Bearer Token informado. Testando chamada pública / sem credenciais...', 'warn');
+      }
+
+      const sw = performance.now();
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            queries: [{ query: daxQuery }],
+            serializerSettings: { includeNulls: true }
+          })
+        });
+
+        const elapsed = Math.round(performance.now() - sw);
+        addLog(`Resposta recebida em ${elapsed}ms com Status HTTP: ${response.status} (${response.statusText})`);
+
+        const rawText = await response.text();
+        let data = null;
+        try { data = JSON.parse(rawText); } catch(e) {}
+
+        if (!response.ok) {
+          const det = data ? JSON.stringify(data) : rawText;
+
+          if (response.status === 401 || response.status === 403) {
+            addLog(`✖ Erro ${response.status} (Acesso Restrito): A API da Microsoft exige Bearer Token autenticado para o dataset AD HOC 80.`, 'err');
+            addLog(`💡 Como resolver agora sem precisar de token:`, 'warn');
+            addLog(`1. Aba 2 ("📋 Colar DAX / Tabela"): Abra o Power BI (Desktop ou Web), copie os dados e cole aqui (100% autônomo!).`, 'info');
+            addLog(`2. Aba 3 ("📁 Arquivo Excel"): Solte a planilha do AD HOC 80 para processamento offline imediato.`, 'info');
+            addLog(`3. Ou informe um Bearer Token válido no campo acima.`, 'info');
+          } else {
+            addLog(`✖ Erro ${response.status}: ${det}`, 'err');
+          }
+          alert(`API Power BI retornou HTTP ${response.status} (Autenticação Necessária).\n\nA chamada pública foi bloqueada porque a Microsoft exige autenticação para consultar o dataset.\n\nPara extrair sem depender de token, utilize a Aba 2 ("Colar DAX / Tabela") ou a Aba 3 ("Arquivo Excel")!`);
+          return;
+        }
+
+        const rows = data?.results?.[0]?.tables?.[0]?.rows;
+        if (!rows || !Array.isArray(rows) || rows.length === 0) {
+          addLog('A API respondeu com status 200, porém nenhuma linha foi retornada.', 'warn');
+          alert('Consulta executada, mas nenhuma linha foi retornada pela view.');
+          return;
+        }
+
+        addLog(`✔ Sucesso! ${rows.length} registros recebidos da API Power BI!`, 'ok');
+        processarLinhasBrutas(rows, 'Power BI REST API (Live)');
+
+      } catch (err) {
+        const elapsed = Math.round(performance.now() - sw);
+        addLog(`✖ Falha de conexão (${elapsed}ms): ${err.message}`, 'err');
+        if (err.name === 'TypeError' && err.message.includes('fetch')) {
+          addLog(`Diagnóstico de Rede: Possível bloqueio de CORS pelo navegador ou política corporativa da Microsoft. Para contornar 100% no navegador, utilize a Aba 2 ("Colar DAX / JSON") ou a Aba 3 ("Arquivo Excel").`, 'warn');
+        }
+        alert(`Falha ao conectar com o Power BI:\n${err.message}\n\nVerifique o console de log para orientações.`);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>▶️</span> Testar e Extrair da API';
+      }
+    }
+
+    function limparCamposApi() {
+      document.getElementById('apiBearerToken').value = '';
+    }
+
+    /* =========================================================
+       MÉTODO 2: COLAR DAX / JSON / TABELA
+       ========================================================= */
+    function processarDadosColados() {
+      const raw = document.getElementById('colarInputTexto').value.trim();
+      if (!raw) {
+        alert('Cole os dados no campo de texto antes de processar.');
+        return;
+      }
+
+      addLog('Processando dados colados pelo usuário...');
+      let rows = null;
+
+      // 1. Tenta JSON
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) rows = parsed;
+        else if (parsed.results?.[0]?.tables?.[0]?.rows) rows = parsed.results[0].tables[0].rows;
+        else if (parsed.rows) rows = parsed.rows;
+        else if (parsed.embarques) {
+          // Já é a estrutura pronta!
+          addLog('✔ JSON detectado no formato de banco embarques oficial!', 'ok');
+          definirDadosExtraidos(parsed, 'JSON Estruturado Oficial');
+          return;
+        } else {
+          rows = Object.values(parsed);
+        }
+      } catch (e) {
+        // Não é JSON, tenta TSV / Tabela copiada
+        const linhas = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (linhas.length > 1) {
+          let separador = '\t';
+          if (!linhas[0].includes('\t') && linhas[0].includes(';')) separador = ';';
+          else if (!linhas[0].includes('\t') && linhas[0].includes(',')) separador = ',';
+
+          const headers = linhas[0].split(separador).map(h => h.trim().replace(/^["']|["']$/g, ''));
+          rows = [];
+          for (let i = 1; i < linhas.length; i++) {
+            const cols = linhas[i].split(separador);
+            const obj = {};
+            headers.forEach((h, idx) => {
+              obj[h] = cols[idx] !== undefined ? cols[idx].trim().replace(/^["']|["']$/g, '') : '';
+            });
+            rows.push(obj);
+          }
+        }
+      }
+
+      if (!rows || rows.length === 0) {
+        addLog('✖ Não foi possível interpretar o formato colado. Certifique-se de colar JSON ou tabela com cabeçalho.', 'err');
+        alert('Formato não reconhecido. Cole um JSON da API ou copie a tabela do Power BI com cabeçalhos.');
+        return;
+      }
+
+      addLog(`✔ ${rows.length} linhas interpretadas da colagem!`, 'ok');
+      processarLinhasBrutas(rows, 'Power BI (Colado Manualmente)');
+    }
+
+    function colarExemploTeste() {
+      const exemplo = [
+        {"car_move_id": "00770567815", "ORDNUM": "0770567815", "PALLET_ID": "00100474003115831215", "DSTLOC": "SO029", "PRTNUM": "80810734", "QTD_CAIXAS": "86"},
+        {"car_move_id": "00770567815", "ORDNUM": "0770567815", "PALLET_ID": "00100474003115831215", "DSTLOC": "SO029", "PRTNUM": "80810744", "QTD_CAIXAS": "172"},
+        {"car_move_id": "00770567815", "ORDNUM": "0770567815", "PALLET_ID": "00100474003114434875", "DSTLOC": "SO029", "PRTNUM": "80327929", "QTD_CAIXAS": "120"},
+        {"car_move_id": "00770567820", "ORDNUM": "0770567820", "PALLET_ID": "00100474003115999999", "DSTLOC": "SO035", "PRTNUM": "83915865", "QTD_CAIXAS": "56"}
+      ];
+      document.getElementById('colarInputTexto').value = JSON.stringify(exemplo, null, 2);
+      addLog('Exemplo de teste preenchido no campo de texto.');
+    }
+
+    /* =========================================================
+       MÉTODO 3: ARQUIVO EXCEL / CSV
+       ========================================================= */
+    const dropZone = document.getElementById('dropZoneExcel');
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files && files[0]) lerArquivoExcel(files[0]);
+    });
+
+    function aoSelecionarArquivoExcel(e) {
+      const file = e.target.files?.[0];
+      if (file) lerArquivoExcel(file);
+    }
+
+    function extrairLinhasDeWorkbook(workbook) {
+      // 1. Procura a melhor aba (sheet4, aloc, stage, palete ou a primeira)
+      let sheetName = workbook.SheetNames[0];
+      for (const name of workbook.SheetNames) {
+        const lower = name.toLowerCase();
+        if (lower.includes('sheet4') || lower.includes('aloc') || lower.includes('palete') || lower.includes('stage') || lower.includes('picking')) {
+          sheetName = name;
+          break;
+        }
+      }
+      const sheet = workbook.Sheets[sheetName];
+      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      if (!matrix || matrix.length < 2) throw new Error('A planilha selecionada está vazia.');
+
+      // 2. Procura a linha de cabeçalho (pode estar na linha 0, 1, 2, 3...)
+      let headerRowIdx = -1;
+      let colMap = {};
+
+      for (let r = 0; r < Math.min(matrix.length, 30); r++) {
+        const row = matrix[r] || [];
+        const detected = {};
+        row.forEach((cell, idx) => {
+          const val = String(cell || '').trim().toLowerCase();
+          if (val.includes('car_move') || val.includes('embarque') || val.includes('carmove')) detected.car_move_id = idx;
+          if (val.includes('pallet') || val.includes('palete') || val.includes('lpn') || val.includes('etiqueta')) detected.pallet_id = idx;
+          if (val.includes('stage') || val.includes('dstloc') || val.includes('destino')) detected.dstloc = idx;
+          if (val.includes('sku') || val.includes('prtnum') || val.includes('material')) detected.prtnum = idx;
+          if (val.includes('qtd') || val.includes('caixa') || val.includes('quantidade') || val.includes('pckqty')) detected.qtd_caixas = idx;
+          if (val.includes('lote') || val.includes('lotnum')) detected.lotnum = idx;
+          if (val.includes('ordnum') || val.includes('order_num') || val.includes('pedido')) detected.ordnum = idx;
+          if (val.includes('desc') || val.includes('descricao')) detected.desc_produto = idx;
+        });
+
+        // Se encontrou ao menos embarque e palete/LPN
+        if (detected.car_move_id !== undefined && detected.pallet_id !== undefined) {
+          headerRowIdx = r;
+          colMap = detected;
+          break;
+        }
+      }
+
+      if (headerRowIdx !== -1) {
+        addLog(`Cabeçalho identificado na linha ${headerRowIdx + 1} da aba "${sheetName}".`);
+        const rows = [];
+        for (let r = headerRowIdx + 1; r < matrix.length; r++) {
+          const row = matrix[r] || [];
+          const obj = {};
+          Object.keys(colMap).forEach(key => {
+            const colIdx = colMap[key];
+            obj[key] = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+          });
+          if (obj.car_move_id && obj.pallet_id) {
+            rows.push(obj);
+          }
+        }
+        return rows;
+      }
+
+      // Se não encontrou cabeçalho tabular nas primeiras linhas, tenta leitura direta
+      return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    }
+
+    function lerArquivoExcel(file) {
+      if (typeof XLSX === 'undefined') {
+        alert('Biblioteca SheetJS ainda está carregando. Aguarde 2 segundos.');
+        return;
+      }
+      addLog(`Lendo arquivo: ${file.name} (${(file.size / 1024).toFixed(1)} KB)...`);
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const rows = extrairLinhasDeWorkbook(workbook);
+
+          addLog(`✔ Planilha lida com sucesso! ${rows.length} registros extraídos.`, 'ok');
+          processarLinhasBrutas(rows, `Arquivo: ${file.name}`);
+        } catch (err) {
+          addLog(`✖ Erro ao ler planilha: ${err.message}`, 'err');
+          alert('Erro ao processar planilha: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    async function carregarBaseOfflineExistente() {
+      addLog('Carregando base offline do sistema (stage_data.js / stage_data.json)...');
+      if (window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques) {
+        addLog(`✔ Base offline carregada com sucesso de stage_data.js!`, 'ok');
+        definirDadosExtraidos(window.EMBEDDED_STAGE_DATA, 'Base Offline (stage_data.js)');
+        return;
+      }
+
+      try {
+        const resp = await fetch('stage_data.json?t=' + Date.now());
+        if (resp.ok) {
+          const db = await resp.json();
+          if (db && db.embarques) {
+            addLog(`✔ Base offline carregada com sucesso de stage_data.json!`, 'ok');
+            definirDadosExtraidos(db, 'Base Offline (stage_data.json)');
+            return;
+          }
+        }
+      } catch (e) {}
+
+      addLog('✖ Não foi possível ler stage_data.js nem stage_data.json.', 'err');
+      alert('Base offline não encontrada. Solte o arquivo Excel na Aba 3 ou cole na Aba 2.');
+    }
+
+    /* =========================================================
+       MÉTODO 4: SERVIDOR LOCAL
+       ========================================================= */
+    async function testarServidorLocal() {
+      addLog('Testando conexão com servidor local (/api/sync-powerbi)...');
+      try {
+        const resp = await fetch('/api/sync-powerbi', { method: 'POST' });
+        if (!resp.ok) throw new Error(`Servidor respondeu com código ${resp.status}`);
+        const json = await resp.json();
+        addLog(`✔ Resposta do servidor local recebida: ${JSON.stringify(json)}`, 'ok');
+
+        // Carrega stage_data.json atualizado
+        const r2 = await fetch('stage_data.json?t=' + Date.now());
+        if (r2.ok) {
+          const db = await r2.json();
+          definirDadosExtraidos(db, 'Servidor Local (PowerShell API)');
+        }
+      } catch (err) {
+        addLog(`✖ Servidor local indisponível ou offline: ${err.message}`, 'err');
+        addLog('Nota: Se estiver abrindo o arquivo direto pelo navegador (file://), inicie o "servidor_web.ps1" ou utilize as Abas 2 ou 3.', 'warn');
+        alert('Servidor local indisponível: ' + err.message);
+      }
+    }
+
+    /* =========================================================
+       CONVERSOR UNIVERSAL DE LINHAS PARA BANCO DE DADOS
+       ========================================================= */
+    function normalizarChave(k) {
+      let str = String(k || '').trim();
+      const bracketMatch = str.match(/\[([^\]]+)\]/);
+      if (bracketMatch) str = bracketMatch[1];
+      return str
+        .replace(/[\[\]']/g, '')
+        .replace(/^.*(?:\.|\/)/, '')
+        .trim()
+        .toLowerCase();
+    }
+
+    function processarLinhasBrutas(rawRows, fonteDesc) {
+      if (!Array.isArray(rawRows) || rawRows.length === 0) {
+        addLog('Nenhuma linha recebida para processamento.', 'warn');
+        return;
+      }
+
+      addLog(`Normalizando colunas e agrupando paletes de ${rawRows.length} registros...`);
+      const dict = {};
+      let totalPecas = 0;
+      let linhasProcessadas = 0;
+
+      rawRows.forEach(row => {
+        const clean = {};
+        Object.keys(row).forEach(k => {
+          clean[normalizarChave(k)] = row[k];
+        });
+
+        const embId = String(clean.car_move_id || clean.car_move || clean.embarque || clean.carmove || '').trim();
+        const palId = String(clean.pallet_id || clean.palete_id || clean.lpn || clean.etiqueta || clean.palete || '').trim();
+        if (!embId || !palId) return;
+
+        const ordNum = String(clean.ordnum || clean.order_num || clean.pedido || '').trim();
+        const stage = String(clean.dstloc || clean.stage || clean.destino || '').trim();
+        const sku = String(clean.prtnum || clean.sku || clean.material || '').trim();
+        const lote = String(clean.lotnum || clean.lote || '').trim();
+        const qtd = parseInt(clean.qtd_caixas || clean.caixas || clean.pckqty || clean.qtd || clean.quantidade || 0, 10) || 0;
+        const descProd = String(clean.desc_produto || clean.descricao || clean.prtdes || clean.desc_resumo || (sku ? `Material ${sku}` : 'Material')).trim();
+
+        if (!dict[embId]) {
+          dict[embId] = {
+            embarque: embId,
+            total_paletes: 0,
+            total_pecas: 0,
+            stages: new Set(),
+            pal: new Map()
+          };
+        }
+
+        const e = dict[embId];
+        if (stage) e.stages.add(stage);
+
+        if (!e.pal.has(palId)) {
+          e.pal.set(palId, {
+            palete: palId,
+            stage: stage,
+            order_num: ordNum,
+            itens: [],
+            qtd_total: 0,
+            sku_resumo: sku || 'Material',
+            desc_resumo: descProd
+          });
+        }
+
+        const p = e.pal.get(palId);
+        p.itens.push({
+          sku: sku || 'Material',
+          desc_produto: descProd,
+          lote: lote,
+          qtd: qtd,
+          order_num: ordNum
+        });
+        p.qtd_total += qtd;
+        e.total_pecas += qtd;
+        totalPecas += qtd;
+        linhasProcessadas++;
+      });
+
+      const embarquesObj = {};
+      Object.values(dict).forEach(e => {
+        const palArray = Array.from(e.pal.values());
+        embarquesObj[e.embarque] = {
+          embarque: e.embarque,
+          total_paletes: palArray.length,
+          total_pecas: e.total_pecas,
+          stages: Array.from(e.stages),
+          paletes: palArray
+        };
+        // Cria alias sem zeros
+        const alias = e.embarque.replace(/^0+/, '');
+        if (alias && alias !== e.embarque) {
+          embarquesObj[alias] = embarquesObj[e.embarque];
+        }
+      });
+
+      const totalEmbarquesUnicos = Object.values(dict).length;
+      if (totalEmbarquesUnicos === 0) {
+        addLog('✖ Nenhuma LPN ou Embarque válido pôde ser extraído das linhas informadas.', 'err');
+        alert('Não foi possível identificar colunas válidas (car_move_id, pallet_id, dstloc). Verifique seus dados.');
+        return;
+      }
+
+      const bancoPronto = {
+        meta: {
+          versao: '2.0',
+          atualizacao: new Date().toISOString(),
+          fonte: fonteDesc,
+          total_embarques: totalEmbarquesUnicos,
+          total_paletes: linhasProcessadas
+        },
+        embarques: embarquesObj
+      };
+
+      addLog(`✔ Extração finalizada com sucesso: ${totalEmbarquesUnicos} embarques únicos e ${linhasProcessadas} paletes!`, 'ok');
+      definirDadosExtraidos(bancoPronto, fonteDesc);
+    }
+
+    function definirDadosExtraidos(db, fonteDesc) {
+      dadosExtraidosGlobal = db;
+      document.getElementById('txtOrigemExtraida').textContent = `Origem: ${fonteDesc} • Extraído em ${new Date().toLocaleTimeString('pt-BR')}`;
+
+      // Monta lista achatada para a prévia e relatórios
+      linhasAchatadasGlobal = [];
+      const embsUnicos = new Set();
+      let totalPal = 0;
+      let totalPec = 0;
+      const skus = new Set();
+      const stages = new Set();
+
+      Object.values(db.embarques || {}).forEach(e => {
+        if (!e.embarque || embsUnicos.has(e.embarque)) return;
+        embsUnicos.add(e.embarque);
+
+        (e.stages || []).forEach(stg => stages.add(stg));
+
+        (e.paletes || []).forEach(p => {
+          totalPal++;
+          totalPec += (p.qtd_total || 0);
+          if (p.stage) stages.add(p.stage);
+
+          if (p.itens && p.itens.length > 0) {
+            p.itens.forEach(it => {
+              if (it.sku) skus.add(it.sku);
+              linhasAchatadasGlobal.push({
+                embarque: e.embarque,
+                palete: p.palete,
+                stage: p.stage || '',
+                order_num: p.order_num || it.order_num || '',
+                sku: it.sku || '',
+                desc: it.desc_produto || p.desc_resumo || '',
+                lote: it.lote || '',
+                qtd: it.qtd || 1
+              });
+            });
+          } else {
+            if (p.sku_resumo) skus.add(p.sku_resumo);
+            linhasAchatadasGlobal.push({
+              embarque: e.embarque,
+              palete: p.palete,
+              stage: p.stage || '',
+              order_num: p.order_num || '',
+              sku: p.sku_resumo || '',
+              desc: p.desc_resumo || '',
+              lote: '',
+              qtd: p.qtd_total || 1
+            });
+          }
+        });
+      });
+
+      // Atualiza KPIs
+      document.getElementById('resEmbarques').textContent = embsUnicos.size.toLocaleString('pt-BR');
+      document.getElementById('resPaletes').textContent = totalPal.toLocaleString('pt-BR');
+      document.getElementById('resPecas').textContent = totalPec.toLocaleString('pt-BR');
+      document.getElementById('resSkus').textContent = skus.size.toLocaleString('pt-BR');
+      document.getElementById('resStages').textContent = stages.size.toLocaleString('pt-BR');
+
+      document.getElementById('badgeStatusGeral').textContent = `✔ ${embsUnicos.size} Embarques / ${totalPal} Paletes Carregados`;
+      document.getElementById('badgeStatusGeral').style.background = '#10B981';
+
+      renderizarPrevia(linhasAchatadasGlobal);
+      document.getElementById('sectionResultados').style.display = 'block';
+      document.getElementById('sectionResultados').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function renderizarPrevia(linhas) {
+      const tbody = document.getElementById('corpoTabelaPrevia');
+      tbody.innerHTML = '';
+      const limite = Math.min(linhas.length, 100);
+
+      for (let i = 0; i < limite; i++) {
+        const item = linhas[i];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td><b>${item.embarque}</b></td>
+          <td><code>${item.palete}</code></td>
+          <td><span style="background:#EEF2FF;color:#4338CA;padding:2px 6px;border-radius:4px;font-weight:700;">${item.stage || '--'}</span></td>
+          <td>${item.order_num}</td>
+          <td><b>${item.sku}</b></td>
+          <td>${item.desc}</td>
+          <td>${item.lote || '--'}</td>
+          <td><b>${item.qtd}</b></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function filtrarPrevia() {
+      const termo = document.getElementById('inputBuscaPrevia').value.trim().toLowerCase();
+      if (!termo) {
+        renderizarPrevia(linhasAchatadasGlobal);
+        return;
+      }
+      const filtradas = linhasAchatadasGlobal.filter(l => 
+        l.embarque.toLowerCase().includes(termo) ||
+        l.palete.toLowerCase().includes(termo) ||
+        l.stage.toLowerCase().includes(termo) ||
+        l.sku.toLowerCase().includes(termo)
+      );
+      renderizarPrevia(filtradas);
+    }
+
+    /* =========================================================
+       AÇÕES DE EXPORTAÇÃO E APLICAÇÃO
+       ========================================================= */
+    function salvarNaMemoriaDoNavegador() {
+      if (!dadosExtraidosGlobal) return;
+      try {
+        localStorage.setItem('dhl_stage_database_custom_v1', JSON.stringify(dadosExtraidosGlobal));
+        addLog('✔ Base de dados salva com sucesso no localStorage do navegador!', 'ok');
+        alert('Base atualizada no navegador! Ao abrir a tela de Conferência (index.html), estes dados estarão disponíveis instantaneamente.');
+      } catch (err) {
+        addLog(`✖ Erro ao gravar no localStorage: ${err.message}`, 'err');
+        alert('Erro ao gravar no localStorage: ' + err.message);
+      }
+    }
+
+    function baixarStageDataJs() {
+      if (!dadosExtraidosGlobal) return;
+      addLog('Gerando arquivo stage_data.js...');
+      const jsContent = 'window.EMBEDDED_STAGE_DATA = ' + JSON.stringify(dadosExtraidosGlobal, null, 2) + ';\n';
+      baixarArquivoTexto('stage_data.js', jsContent, 'application/javascript');
+      addLog('✔ Download de stage_data.js iniciado. Salve na pasta oficial para atualizar o sistema permanentemente.', 'ok');
+    }
+
+    function baixarStageDataJson() {
+      if (!dadosExtraidosGlobal) return;
+      addLog('Gerando arquivo stage_data.json...');
+      const jsonContent = JSON.stringify(dadosExtraidosGlobal, null, 2);
+      baixarArquivoTexto('stage_data.json', jsonContent, 'application/json');
+      addLog('✔ Download de stage_data.json iniciado.', 'ok');
+    }
+
+    function baixarArquivoTexto(nome, conteudo, tipo) {
+      const blob = new Blob([conteudo], { type: tipo });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nome;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function baixarPlanilhaExcel() {
+      if (!linhasAchatadasGlobal || linhasAchatadasGlobal.length === 0) return;
+      if (typeof XLSX === 'undefined') {
+        alert('Biblioteca SheetJS ainda não carregada.');
+        return;
+      }
+      addLog('Gerando planilha Excel (.xlsx)...');
+      const linhas = [];
+      linhas.push(['EMBARQUE', 'PALETE_LPN', 'STAGE', 'ORDEM_NUM', 'SKU', 'DESCRICAO', 'LOTE', 'QTD_CAIXAS']);
+
+      linhasAchatadasGlobal.forEach(l => {
+        linhas.push([l.embarque, l.palete, l.stage, l.order_num, l.sku, l.desc, l.lote, l.qtd]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(linhas);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'BASE_EXTRAIDA');
+
+      const dataHoje = new Date().toISOString().slice(0,10);
+      XLSX.writeFile(wb, `DHL_Base_Extraida_${dataHoje}.xlsx`);
+      addLog(`✔ Planilha Excel baixada com ${linhas.length - 1} registros!`, 'ok');
+    }
+
+    function transmitirOnTime() {
+      if (!dadosExtraidosGlobal) return;
+      if (typeof mqtt === 'undefined') {
+        alert('Cliente MQTT não disponível.');
+        return;
+      }
+
+      addLog('Conectando ao broker MQTT público para transmissão On-Time...');
+      const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+        clientId: 'dhl_extractor_' + Math.random().toString(16).substring(2, 8),
+        clean: true
+      });
+
+      client.on('connect', () => {
+        addLog('Conectado ao canal Live. Transmitindo atualização da base...', 'ok');
+        const canal = 'dhl/pg_itatiaia/expedicao/PG_ITATIAIA_EXPEDICAO';
+        
+        // Transmite aviso de nova versão
+        const payload = JSON.stringify({
+          tipo: 'BASE_COMPLETA_ATUALIZADA',
+          remetente: 'Central_Extracao_HTML',
+          timestamp: new Date().toISOString(),
+          embarques: dadosExtraidosGlobal.embarques
+        });
+
+        client.publish(canal, payload, { qos: 0 }, (err) => {
+          if (!err) {
+            addLog('✔ Transmissão concluída! Todos os coletores e tablets no canal receberam a nova base.', 'ok');
+            alert('Base transmitida ao vivo com sucesso para todos os aparelhos conectados!');
+          } else {
+            addLog(`✖ Falha ao publicar mensagem: ${err.message}`, 'err');
+          }
+          client.end();
+        });
+      });
+
+      client.on('error', (err) => {
+        addLog(`✖ Erro MQTT: ${err.message}`, 'err');
+        client.end();
+      });
+    }
+
+    // Inicialização
+    document.addEventListener('DOMContentLoaded', () => {
+      // Se já houver base na memória, podemos carregar para visualização
+      if (window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques) {
+        addLog('Base existente detectada em stage_data.js. Pronto para novos testes.');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -253,6 +253,9 @@
           <button id="btnPularVaga" class="btn-slots-tool" onclick="skipCurrentSlot()" title="Pular a vaga atual para a próxima">
             Pular Vaga
           </button>
+          <button id="btnModoEmpilhamento" class="btn-slots-tool" style="font-weight: 800; background: #EEF2FF; border-color: #6366F1; color: #4338CA;" onclick="toggleModoEmpilhamento()" title="Alternar modo de carga: 1 Palete/Vaga, 2 Paletes Duplados (empilhados) ou Fracionado (até 3 na mesma vaga)">
+            🥞 Carga: Padrão (1x)
+          </button>
         </div>
       </div>
 
@@ -263,9 +266,10 @@
       <div class="slots-legend">
         <span class="legend-item"><span class="swatch swatch-free"></span> <b>Cinza:</b> Livre</span>
         <span class="legend-item"><span class="swatch swatch-target"></span> <b>Azul:</b> Bipando Agora</span>
-        <span class="legend-item"><span class="swatch swatch-done"></span> <b>Verde:</b> Conferido (✔ Bateu)</span>
+        <span class="legend-item"><span class="swatch swatch-done"></span> <b>Verde:</b> Conferido (1 plt)</span>
+        <span class="legend-item"><span class="swatch swatch-duplado" style="background:#7C3AED;"></span> <b>Roxo:</b> Duplado (2 plts 🥞)</span>
+        <span class="legend-item"><span class="swatch swatch-fracionado" style="background:#EA580C;"></span> <b>Laranja:</b> Fracionado (3 plts 📦)</span>
         <span class="legend-item"><span class="swatch swatch-waiting"></span> <b>Cinza Claro:</b> Na Fila</span>
-        <span class="legend-item"><span class="swatch swatch-partial"></span> <b>Laranja:</b> Parcial / Ramificação</span>
         <span class="legend-item"><span class="swatch swatch-divergent"></span> <b>Vermelho:</b> Bloqueado / Divergência (✖)</span>
       </div>
     </section>
@@ -370,9 +374,15 @@
 
     <!-- Action Bar Inferior -->
     <footer class="action-bar-bottom">
-      <div>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button id="btnProximoStage" type="button" class="btn-clean-primary" style="margin: 0; background: #0284C7; border: 1.5px solid #0369A1; font-weight: 800; padding: 10px 18px;" onclick="abrirModalProximoStage()" title="Finalizar o stage atual e atrelar um novo stage físico a este embarque">
+          ⏭️ Concluir Stage &amp; Próximo
+        </button>
         <button id="btnFinalizar" class="btn-finish-clean">
-          ✔ Concluir Conferência
+          ✔ Concluir Embarque
+        </button>
+        <button id="btnCorrigirPaleteModal" type="button" class="btn-secondary-clean" onclick="abrirModalCorrecaoLpn()" title="Corrigir ou re-bipar palete/LPN informando o motivo">
+          🔄 Corrigir / Re-bipar LPN
         </button>
         <button id="btnExportarRelatorio" class="btn-secondary-clean">
           Exportar CSV
@@ -600,7 +610,14 @@
         <button type="button" class="btn-close-x" onclick="cancelarAmostraAudit()">&times;</button>
       </div>
 
-      <div id="amostraAuditPalletInfo" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 16px;"></div>
+      <div id="amostraAuditPalletInfo" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 12px;"></div>
+
+      <div id="amostraTentativasBadge" style="display: flex; align-items: center; justify-content: space-between; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 6px; padding: 6px 12px; margin-bottom: 12px; font-size: 0.8rem; font-weight: 700; color: #1E40AF;">
+        <span>🎯 Tentativa <span id="amostraNumTentativa" style="background:#2563EB; color:#fff; padding:2px 7px; border-radius:12px; font-weight:800;">1</span> de 3</span>
+        <span id="amostraTentativasDica" style="font-weight: 600; font-size: 0.74rem; color: #3B82F6;">Até 3 chances antes de acionar Inventário</span>
+      </div>
+
+      <div id="amostraErroFeedback" style="display: none; background: #FEF2F2; border: 1.5px solid #F87171; border-radius: 8px; padding: 10px; margin-bottom: 14px; font-size: 0.82rem; color: #991B1B; line-height: 1.4;"></div>
 
       <form id="formAmostraAudit" onsubmit="confirmarAmostraAudit(event)">
         <div class="form-field" style="margin-bottom: 14px;">
@@ -621,6 +638,132 @@
           <button type="button" class="btn-secondary-clean" onclick="cancelarAmostraAudit()">Cancelar</button>
           <button type="submit" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 10px 22px; font-weight: 800;">
             ✔ Confirmar Palete [ENTER]
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 0B2: CONCLUIR STAGE ATUAL & ATRELAR PRÓXIMO STAGE
+       ========================================================= -->
+  <div id="modalProximoStage" class="modal-backdrop" style="display: none;">
+    <div class="modal-clean-box" style="max-width: 500px; border-top: 4px solid #0284C7;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1.5px solid #F1F5F9; padding-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.5rem;">⏭️</span>
+          <div>
+            <h2 style="font-size: 1.15rem; font-weight: 800; color: #1E293B; margin: 0;">Concluir Stage &amp; Atrelar Próximo</h2>
+            <span style="font-size: 0.76rem; color: #64748B;">Atrelamento de novo stage físico ao mesmo embarque</span>
+          </div>
+        </div>
+        <button type="button" class="btn-close-x" onclick="fecharModalProximoStage()">&times;</button>
+      </div>
+
+      <div style="background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 0.85rem; color: #0369A1; line-height: 1.5;">
+        <div><b>Stage Físico Atual:</b> <span id="proxStageAtualNome" style="font-weight: 900; color: #0284C7;">SO011</span> (Concluído)</div>
+        <div style="font-size: 0.78rem; color: #0C4A6E; margin-top: 4px;">
+          As vagas deste stage foram finalizadas. Para continuar o embarque, informe o código do próximo stage que receberá os paletes.
+        </div>
+      </div>
+
+      <form id="formProximoStage" onsubmit="confirmarProximoStage(event)">
+        <div class="form-field" style="margin-bottom: 18px;">
+          <label for="inputProximoStageCode" style="font-weight: 700; color: #1E293B; font-size: 0.88rem; display: block; margin-bottom: 6px;">
+            🏷️ Bipe ou digite o código do PRÓXIMO STAGE:
+          </label>
+          <input type="text" id="inputProximoStageCode" class="input-clean" required placeholder="Bipe aqui (ex: SO012, SO013, ST040)..." style="font-size: 1.15rem; font-weight: 800; color: #0284C7; text-transform: uppercase;" autocomplete="off" spellcheck="false">
+          <small style="color: #64748B; font-size: 0.75rem; margin-top: 4px; display: block;">
+            Você pode bipar a placa física do stage diretamente com o leitor de código de barras.
+          </small>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" class="btn-secondary-clean" onclick="fecharModalProximoStage()">Cancelar</button>
+          <button type="submit" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 10px 22px; font-weight: 800; background: #0284C7;">
+            ✔ Atrelar e Abrir Novo Stage [ENTER]
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 0B3: CORREÇÃO & RE-BIPAGEM DE LPN COM SELEÇÃO DE MOTIVO
+       ========================================================= -->
+  <div id="modalCorrecaoLpn" class="modal-backdrop" style="display: none;">
+    <div class="modal-clean-box" style="max-width: 520px; border-top: 4px solid #D97706;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1.5px solid #F1F5F9; padding-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.5rem;">🔄</span>
+          <div>
+            <h2 style="font-size: 1.15rem; font-weight: 800; color: #1E293B; margin: 0;">Correção &amp; Re-bipagem de LPN</h2>
+            <span style="font-size: 0.76rem; color: #64748B;">Selecione a vaga, a LPN e o motivo para re-bipar</span>
+          </div>
+        </div>
+        <button type="button" class="btn-close-x" onclick="fecharModalCorrecaoLpn()">&times;</button>
+      </div>
+
+      <form id="formCorrecaoLpn" onsubmit="confirmarRebipagemLpn(event)">
+        <!-- 1. Vaga a Corrigir -->
+        <div class="form-field" style="margin-bottom: 14px;">
+          <label for="selectVagaCorrecao" style="font-weight: 700; color: #1E293B; font-size: 0.85rem; display: block; margin-bottom: 4px;">
+            📍 Selecione a Vaga que precisa ser corrigida:
+          </label>
+          <select id="selectVagaCorrecao" class="input-clean" style="font-weight: 800; color: #0284C7; font-size: 0.95rem;" onchange="aoMudarVagaCorrecao(this.value)">
+            <option value="">Carregando vagas conferidas...</option>
+          </select>
+        </div>
+
+        <!-- 2. Paletes / LPNs presentes nesta vaga (suporte a duplado/fracionado) -->
+        <div id="boxLpnsNaVaga" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+          <div style="font-size: 0.78rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px;">
+            📦 LPN(s) nesta Vaga (Selecione qual deseja re-bipar):
+          </div>
+          <div id="listaLpnsVagaRadio" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem;"></div>
+        </div>
+
+        <!-- 3. Motivo da Re-bipagem (Select Point / Checkbox) -->
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label style="font-weight: 800; color: #1E293B; font-size: 0.85rem; display: block; margin-bottom: 8px;">
+            ⚠️ Motivo da Correção / Re-bipagem:
+          </label>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.84rem; color: #1E293B; background: #FFFBEB; border: 1px solid #FDE68A; padding: 12px; border-radius: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="motivoRebipagem" value="LPN_INCORRETA" checked>
+              <span><b>Bipagem de LPN incorreta</b> (LPN trocada ou leitor capturou código errado)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="motivoRebipagem" value="PALETE_DIVERGENTE">
+              <span><b>Palete físico divergente</b> (Palete não pertence a este stage/vaga)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="motivoRebipagem" value="TROCA_POSICAO">
+              <span><b>Inversão de posição</b> (Reordenar vaga física no stage)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="motivoRebipagem" value="AJUSTE_DUPLADO_FRACIONADO">
+              <span><b>Ajuste de Duplado / Fracionado</b> (Remover nível incorreto)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="motivoRebipagem" value="RECONTAGEM_QUALIDADE">
+              <span><b>Recontagem / Auditoria</b> (Solicitação do Inventário ou Liderança)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 4. Observação Opcional -->
+        <div class="form-field" style="margin-bottom: 18px;">
+          <label for="inputObsCorrecao" style="font-weight: 700; color: #475569; font-size: 0.78rem;">
+            Observação complementar (opcional):
+          </label>
+          <input type="text" id="inputObsCorrecao" class="input-clean" placeholder="Ex: Substituído pelo palete correto da doca...">
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" class="btn-secondary-clean" onclick="fecharModalCorrecaoLpn()">Cancelar</button>
+          <button type="submit" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 10px 22px; font-weight: 800; background: #D97706;">
+            🔄 Liberar Vaga &amp; Re-bipar Agora
           </button>
         </div>
       </form>
@@ -702,6 +845,34 @@
 
       <!-- Feedback de Processamento do Upload -->
       <div id="uploadFeedback" style="display: none; margin-top: 16px;"></div>
+
+      <!-- Opção Direta via API: Extrair CSV do SharePoint (Central de Dados OMS) -->
+      <div style="background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 8px; padding: 14px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <div style="font-size: 0.88rem; font-weight: 800; color: #92400E; display: flex; align-items: center; gap: 6px;">
+            <span>📁</span> Extrair CSV do SharePoint (Central de Dados OMS)
+          </div>
+          <div style="font-size: 0.76rem; color: #B45309; margin-top: 2px;">
+            Lê o <code>ADHOC_80.csv</code> sincronizado e injeta na ferramenta em &lt; 1 segundo
+          </div>
+        </div>
+        <button type="button" class="btn-clean-primary" id="btnExtrairSharePointApi" style="margin-top: 0; width: auto; padding: 9px 18px; background: #D97706; font-weight: 700;" onclick="extrairCsvSharePoint()">
+          ⚡ Extrair CSV via API
+        </button>
+      </div>
+
+      <!-- Opção 100% no Navegador: Colar Texto do CSV Diretamente -->
+      <details style="margin-top: 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+        <summary style="font-size: 0.84rem; font-weight: 700; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <span>📋</span> Ou cole os dados do CSV diretamente aqui (100% no HTML)
+        </summary>
+        <div style="margin-top: 10px;">
+          <textarea id="txtCsvManual" rows="4" style="width: 100%; box-sizing: border-box; font-family: Consolas, monospace; font-size: 0.76rem; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px;" placeholder="Cole aqui o conteúdo do CSV (ex: [car_move_id],[ORDNUM],[PALLET_ID],[DSTLOC],[PRTNUM],[QTD_CAIXAS]...)"></textarea>
+          <button type="button" class="btn-clean-primary" style="margin-top: 8px; width: 100%; padding: 8px; font-size: 0.82rem; background: #0284C7;" onclick="processarTextoCsvColado()">
+            📥 Injetar CSV na Ferramenta Agora
+          </button>
+        </div>
+      </details>
 
       <!-- Opção Rápida via Power BI Live API (Code) -->
       <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 12px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
@@ -973,13 +1144,14 @@
   <div id="toastNotification" class="toast-box"></div>
 
   <!-- Bibliotecas: MQTT para sincronização em tempo real na nuvem/GitHub e SheetJS para Excel -->
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="mqtt.min.js"></script>
+  <script>if (typeof mqtt === 'undefined') { document.write('<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"><\/script>'); }</script>
   <script src="xlsx.full.min.js"></script>
   <script src="stage_data.js"></script>
-  <script src="consolidation_planner.js?v=20261013"></script>
-  <script src="app.js"></script>
-  <script src="stage_map.js?v=20261013"></script>
-  <script src="powerbi_sync.js"></script>
-  <script src="sync.js"></script>
+  <script src="consolidation_planner.js?v=20261015c"></script>
+  <script src="app.js?v=20261015c"></script>
+  <script src="stage_map.js?v=20261015c"></script>
+  <script src="powerbi_sync.js?v=20261015c"></script>
+  <script src="sync.js?v=20261015c"></script>
 </body>
 </html>

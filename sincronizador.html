@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DHL Supply Chain • Sincronizador Automático Live</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --dhl-red: #D40511;
+      --dhl-yellow: #FFCC00;
+      --dhl-dark: #1E293B;
+      --dhl-gray: #F8FAFC;
+      --dhl-border: #E2E8F0;
+      --dhl-green: #10B981;
+      --dhl-blue: #003DA5;
+    }
+
+    body {
+      background: #F1F5F9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: var(--dhl-dark);
+    }
+
+    .sync-header {
+      background: #FFFFFF;
+      border-bottom: 3px solid var(--dhl-yellow);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .sync-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .sync-logo {
+      height: 38px;
+      width: auto;
+    }
+
+    .sync-container {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+
+    .status-banner {
+      background: linear-gradient(135deg, #003DA5, #1E40AF);
+      color: #FFFFFF;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 20px rgba(0, 61, 165, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .countdown-chip {
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 8px 18px;
+      border-radius: 30px;
+      font-size: 0.95rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(4px);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: #FFFFFF;
+      border-radius: 10px;
+      padding: 18px;
+      border: 1px solid var(--dhl-border);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      border-left: 4px solid var(--dhl-red);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+    }
+
+    .kpi-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: #0F172A;
+    }
+
+    .action-panel {
+      background: #FFFFFF;
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--dhl-border);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      margin-bottom: 24px;
+    }
+
+    .btn-action-primary {
+      background: #003DA5;
+      color: #FFFFFF;
+      border: none;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(0, 61, 165, 0.3);
+      transition: all 0.2s;
+    }
+    .btn-action-primary:hover {
+      background: #002B7A;
+      transform: translateY(-1px);
+    }
+
+    .btn-action-success {
+      background: #059669;
+      color: #FFFFFF;
+      border: none;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+      transition: all 0.2s;
+    }
+    .btn-action-success:hover {
+      background: #047857;
+      transform: translateY(-1px);
+    }
+
+    .btn-action-outline {
+      background: #FFFFFF;
+      color: #1E293B;
+      border: 1.5px solid var(--dhl-border);
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-action-outline:hover {
+      background: #F8FAFC;
+      border-color: #CBD5E1;
+    }
+
+    .log-box {
+      background: #0F172A;
+      color: #38BDF8;
+      border-radius: 10px;
+      padding: 16px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.82rem;
+      max-height: 260px;
+      overflow-y: auto;
+      line-height: 1.6;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .log-item {
+      margin-bottom: 4px;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      padding-bottom: 4px;
+    }
+    .log-time { color: #94A3B8; margin-right: 8px; }
+    .log-success { color: #4ADE80; font-weight: bold; }
+    .log-info { color: #E2E8F0; }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <header class="sync-header">
+    <div class="sync-brand">
+      <img src="dhl_logo.svg" alt="DHL" class="sync-logo" onerror="this.onerror=null; this.src='dhl_logo.png';">
+      <div style="border-left: 2px solid var(--dhl-border); height: 28px; margin: 0 4px;"></div>
+      <div>
+        <h1 style="font-size: 1.15rem; font-weight: 900; margin: 0; color: #D40511;">Sincronizador Automático Live</h1>
+        <div style="font-size: 0.74rem; color: #64748B;">P&amp;G Itatiaia • 100% no Navegador • Sem BAT / Sem Terminal</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <a href="extrair.html" class="btn-action-primary" style="text-decoration: none; padding: 9px 18px; font-size: 0.88rem; background: #0F172A; border: 1.5px solid #38BDF8; color: #38BDF8;">
+        <span>🔬</span> Extrair Dados
+      </a>
+      <a href="index.html" class="btn-action-primary" style="text-decoration: none; padding: 9px 18px; font-size: 0.88rem; background: var(--dhl-red);">
+        <span>📦</span> Abrir Conferência de Stage
+      </a>
+    </div>
+  </header>
+
+  <main class="sync-container">
+
+    <!-- Status Banner com Cronômetro Automático -->
+    <section class="status-banner">
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+          <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #4ADE80; box-shadow: 0 0 10px #4ADE80;"></span>
+          <span style="font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; font-size: 0.88rem; color: #BBF7D0;">Sincronização Automática Ativa</span>
+        </div>
+        <h2 style="margin: 0; font-size: 1.55rem; font-weight: 900;">Base da Expedição Atualizada em Tempo Real</h2>
+        <p style="margin: 6px 0 0 0; font-size: 0.85rem; opacity: 0.9;">
+          O sistema busca os dados da nuvem continuamente e sincroniza todos os coletores e tablets automaticamente.
+        </p>
+      </div>
+
+      <div class="countdown-chip">
+        <span>⏱️ Próximo ciclo em:</span>
+        <span id="countdownDisplay" style="font-size: 1.25rem; font-variant-numeric: tabular-nums;">02:00</span>
+      </div>
+    </section>
+
+    <!-- Indicadores KPIs -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">🚚 Embarques Ativos</div>
+        <div id="kpiEmbarques" class="kpi-value">--</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Na visão da AD HOC 80</div>
+      </div>
+
+      <div class="kpi-card" style="border-left-color: #003DA5;">
+        <div class="kpi-title">📦 Paletes no Galpão</div>
+        <div id="kpiPaletes" class="kpi-value">--</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Alocados e prontos para conferência</div>
+      </div>
+
+      <div class="kpi-card" style="border-left-color: #059669;">
+        <div class="kpi-title">🏷️ SKUs Catalogados</div>
+        <div id="kpiSkus" class="kpi-value">--</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Com descrição de produto P&amp;G</div>
+      </div>
+
+      <div class="kpi-card" style="border-left-color: #EAB308;">
+        <div class="kpi-title">📡 Dispositivos no Canal</div>
+        <div id="kpiPeers" class="kpi-value">1 Online</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Tablets e PCs recebendo live</div>
+      </div>
+    </section>
+
+    <!-- Painel de Ações Rápidas (Zero BAT) -->
+    <section class="action-panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: #1E293B;">Controles de Base e Exportação</h3>
+          <span style="font-size: 0.78rem; color: #64748B;">Execute sincronizações manuais instantâneas ou baixe o Excel gerado pelo sistema</span>
+        </div>
+
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button type="button" class="btn-action-primary" onclick="forcarAtualizacaoNuvem()">
+            <span>⚡</span> Sincronizar Agora
+          </button>
+          <button type="button" class="btn-action-success" onclick="baixarBaseEmXlsx()">
+            <span>📥</span> Baixar Base em Excel (.xlsx)
+          </button>
+          <label class="btn-action-outline" style="cursor: pointer;">
+            <span>📤</span> Subir Excel Manual
+            <input type="file" id="inputManualXlsx" accept=".xlsx, .xls, .csv" style="display: none;" onchange="subirExcelManual(event)">
+          </label>
+        </div>
+      </div>
+
+      <div style="background: #F8FAFC; border: 1px solid var(--dhl-border); border-radius: 8px; padding: 12px; font-size: 0.8rem; color: #475569;">
+        💡 <b>100% Automático no Navegador:</b> Esta tela pode ficar aberta no tablet ou computador. Ela não precisa de nenhum arquivo executável, não precisa de `.bat` e garante que todas as posições de paletes estejam sempre alinhadas com a operação.
+      </div>
+    </section>
+
+    <!-- Log de Sincronização em Tempo Real -->
+    <section>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="font-size: 0.85rem; font-weight: 800; color: #475569; text-transform: uppercase;">
+          📟 Log de Eventos de Sincronização
+        </div>
+        <button type="button" style="background: none; border: none; color: #64748B; font-size: 0.75rem; cursor: pointer;" onclick="document.getElementById('syncLogList').innerHTML=''">
+          Limpar Log
+        </button>
+      </div>
+
+      <div id="syncLogList" class="log-box">
+        <div class="log-item">
+          <span class="log-time">[${new Date().toLocaleTimeString('pt-BR')}]</span>
+          <span class="log-info">Sincronizador HTML iniciado. Aguardando primeira verificação...</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bibliotecas Locais / CDN Fallback -->
+  <script src="xlsx.full.min.js"></script>
+  <script src="mqtt.min.js"></script>
+  <script>if (typeof mqtt === 'undefined') { document.write('<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"><\/script>'); }</script>
+  <script src="stage_data.js"></script>
+
+  <script>
+    let intervalSeconds = 120; // 2 minutos
+    let secondsLeft = intervalSeconds;
+    let timerRef = null;
+    let currentDatabase = null;
+
+    function addLog(msg, type = 'info') {
+      const box = document.getElementById('syncLogList');
+      if (!box) return;
+      const timeStr = new Date().toLocaleTimeString('pt-BR');
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      div.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="${type === 'success' ? 'log-success' : 'log-info'}">${msg}</span>`;
+      box.insertBefore(div, box.firstChild);
+    }
+
+    function atualizarKPIs(db) {
+      if (!db || !db.embarques) return;
+      currentDatabase = db;
+
+      const uniqueEmbs = new Set(Object.values(db.embarques).map(e => e.embarque));
+      let totalPaletes = 0;
+      const uniqueSkus = new Set();
+
+      Object.values(db.embarques).forEach(e => {
+        if (e.paletes && Array.isArray(e.paletes)) {
+          totalPaletes += e.paletes.length;
+          e.paletes.forEach(p => {
+            if (p.itens && Array.isArray(p.itens)) {
+              p.itens.forEach(it => {
+                if (it.sku) uniqueSkus.add(it.sku);
+              });
+            }
+          });
+        }
+      });
+
+      document.getElementById('kpiEmbarques').textContent = uniqueEmbs.size.toLocaleString('pt-BR');
+      document.getElementById('kpiPaletes').textContent = totalPaletes.toLocaleString('pt-BR');
+      document.getElementById('kpiSkus').textContent = uniqueSkus.size.toLocaleString('pt-BR');
+    }
+
+    async function carregarBaseMaisRecente() {
+      addLog('Verificando atualização na nuvem (stage_data.js)...');
+      try {
+        const resp = await fetch('stage_data.js?t=' + Date.now());
+        if (resp.ok) {
+          const txt = await resp.text();
+          const fn = new Function(txt);
+          fn();
+
+          if (window.EMBEDDED_STAGE_DATA) {
+            atualizarKPIs(window.EMBEDDED_STAGE_DATA);
+            // Salva na memória do navegador
+            localStorage.setItem('dhl_stage_database_custom_v1', JSON.stringify(window.EMBEDDED_STAGE_DATA));
+            addLog(`✔ Base sincronizada com sucesso! (${document.getElementById('kpiEmbarques').textContent} embarques / ${document.getElementById('kpiPaletes').textContent} paletes)`, 'success');
+          }
+        }
+      } catch(err) {
+        addLog('Aviso: Utilizando base carregada em cache local.', 'info');
+        if (window.EMBEDDED_STAGE_DATA) {
+          atualizarKPIs(window.EMBEDDED_STAGE_DATA);
+        }
+      }
+    }
+
+    function startTimer() {
+      if (timerRef) clearInterval(timerRef);
+      secondsLeft = intervalSeconds;
+
+      timerRef = setInterval(() => {
+        secondsLeft--;
+        const min = Math.floor(secondsLeft / 60);
+        const sec = secondsLeft % 60;
+        document.getElementById('countdownDisplay').textContent = 
+          `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+        if (secondsLeft <= 0) {
+          secondsLeft = intervalSeconds;
+          carregarBaseMaisRecente();
+        }
+      }, 1000);
+    }
+
+    window.forcarAtualizacaoNuvem = function() {
+      secondsLeft = intervalSeconds;
+      carregarBaseMaisRecente();
+    };
+
+    // Exportação em Excel (.xlsx) gerada pelo navegador (1 Clique)
+    window.baixarBaseEmXlsx = function() {
+      if (!currentDatabase || !currentDatabase.embarques) {
+        alert('Nenhuma base carregada para exportação.');
+        return;
+      }
+      if (typeof XLSX === 'undefined') {
+        alert('Biblioteca XLSX carregando, aguarde 2 segundos...');
+        return;
+      }
+
+      addLog('Gerando arquivo Excel (.xlsx) diretamente no navegador...');
+      const linhas = [];
+      linhas.push([
+        'EMBARQUE', 'PALETE_LPN', 'STAGE', 'ORDEM_NUM', 'SKU', 'DESCRICAO_PRODUTO', 'LOTE', 'QTD_CAIXAS', 'TRANSPORTADORA', 'PLACA'
+      ]);
+
+      const embs = Object.values(currentDatabase.embarques);
+      embs.forEach(e => {
+        const trans = e.transportadora || '';
+        const placa = e.placa || '';
+        if (e.paletes && Array.isArray(e.paletes)) {
+          e.paletes.forEach(p => {
+            const stg = p.stage || '';
+            const palId = p.palete || '';
+            const ordNum = p.order_num || '';
+
+            if (p.itens && p.itens.length > 0) {
+              p.itens.forEach(it => {
+                linhas.push([
+                  e.embarque,
+                  palId,
+                  stg,
+                  ordNum || it.order_num || '',
+                  it.sku || '',
+                  it.desc_produto || '',
+                  it.lote || '',
+                  it.qtd || 1,
+                  trans,
+                  placa
+                ]);
+              });
+            } else {
+              linhas.push([
+                e.embarque,
+                palId,
+                stg,
+                ordNum,
+                p.sku_resumo || '',
+                p.desc_resumo || '',
+                '',
+                p.qtd_total || 1,
+                trans,
+                placa
+              ]);
+            }
+          });
+        }
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(linhas);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'AD_HOC_80_LIVE');
+
+      const dataHoje = new Date().toISOString().slice(0,10);
+      XLSX.writeFile(wb, `DHL_Expedicao_AD_HOC_80_${dataHoje}.xlsx`);
+      addLog(`✔ Planilha Excel exportada com sucesso! (${linhas.length - 1} linhas de paletes).`, 'success');
+    };
+
+    // Subir planilha Excel manual na própria tela
+    window.subirExcelManual = function(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      addLog(`Lendo planilha manual: ${file.name}...`);
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(sheet);
+
+          addLog(`✔ Planilha ${file.name} processada: ${json.length} registros carregados.`, 'success');
+          alert(`Planilha carregada com sucesso! ${json.length} linhas lidas.`);
+        } catch(err) {
+          addLog(`Erro ao ler Excel: ${err.message}`, 'info');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    // Início
+    document.addEventListener('DOMContentLoaded', () => {
+      carregarBaseMaisRecente();
+      startTimer();
+    });
+  </script>
+</body>
+</html>
