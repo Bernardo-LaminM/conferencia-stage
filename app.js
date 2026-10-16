@@ -2946,19 +2946,24 @@ function entrarNoEmbarque() {
   const input = document.getElementById('inputEmbarque');
   let embId = input ? input.value.trim() : '';
   const opInput = document.getElementById('inputOperador');
-  const operador = opInput ? opInput.value.trim() : '';
+  let operador = opInput ? opInput.value.trim() : '';
 
   if (!embId) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Digite ou bipe o número do embarque para iniciar!');
+    }
     if (input) input.focus();
     return;
   }
 
+  // Se o conferente não foi informado, usa o último salvo ou 'Conferente DHL'
   if (!operador) {
-    sound.playError('Informe o conferente');
-    alert('Por favor, digite o nome do Conferente / Operador para iniciar a conferência!');
-    if (opInput) opInput.focus();
-    return;
+    operador = localStorage.getItem('dhl_last_operator') || 'Conferente DHL';
+    if (opInput) opInput.value = operador;
   }
+  try {
+    localStorage.setItem('dhl_last_operator', operador);
+  } catch (e) {}
 
   const buscaRes = window.localizarEmbarqueUniversal(embId);
 
@@ -5596,49 +5601,42 @@ function initApp() {
   const inputOp = document.getElementById('inputOperador');
   const btnLogin = document.getElementById('btnLogin');
 
+  const savedOperator = localStorage.getItem('dhl_last_operator') || '';
+  if (inputOp && savedOperator) {
+    inputOp.value = savedOperator;
+  }
+
   function atualizarStatusBotaoLogin() {
     const hasEmb = !!(inputEmb?.value.trim());
-    const hasOp = !!(inputOp?.value.trim());
     if (btnLogin) {
-      if (hasEmb && hasOp) {
-        btnLogin.disabled = false;
+      btnLogin.disabled = false;
+      if (hasEmb) {
         btnLogin.style.opacity = '1';
         btnLogin.style.cursor = 'pointer';
       } else {
-        btnLogin.disabled = true;
-        btnLogin.style.opacity = '0.45';
-        btnLogin.style.cursor = 'not-allowed';
+        btnLogin.style.opacity = '0.75';
+        btnLogin.style.cursor = 'pointer';
       }
     }
   }
 
   if (inputEmb) {
-    inputEmb.value = '';
     inputEmb.focus();
     inputEmb.addEventListener('input', atualizarStatusBotaoLogin);
     inputEmb.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (!inputOp?.value.trim()) {
-          if (inputOp) inputOp.focus();
-        } else {
-          entrarNoEmbarque();
-        }
+        entrarNoEmbarque();
       }
     });
   }
 
   if (inputOp) {
-    inputOp.value = '';
     inputOp.addEventListener('input', atualizarStatusBotaoLogin);
     inputOp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (!inputEmb?.value.trim()) {
-          if (inputEmb) inputEmb.focus();
-        } else {
-          entrarNoEmbarque();
-        }
+        entrarNoEmbarque();
       }
     });
   }
