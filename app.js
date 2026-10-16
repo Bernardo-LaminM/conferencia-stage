@@ -479,41 +479,43 @@ function persistActiveSession() {
    CARREGAMENTO E MESCLAGEM DA BASE DE DADOS
    ========================================================= */
 function loadData() {
-  // 1. Base customizada salva via Upload de Excel no navegador (prioridade operacional de hoje)
-  let loadedFromCustom = false;
+  const embedded = window.EMBEDDED_STAGE_DATA;
+  let customDb = null;
   try {
     const savedCustom = localStorage.getItem(STORAGE_DATABASE_OVERRIDE_KEY);
-    if (savedCustom) {
-      const customDb = JSON.parse(savedCustom);
-      if (customDb && customDb.embarques && Object.keys(customDb.embarques).length > 0) {
-        database = customDb;
-        loadedFromCustom = true;
-      }
-    }
+    if (savedCustom) customDb = JSON.parse(savedCustom);
   } catch(e) {
     console.warn('Erro ao carregar base salva no storage:', e);
   }
 
-  // 2. Base embutida (stage_data.js) caso não haja base customizada salva
-  if (!loadedFromCustom) {
-    if (window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques && Object.keys(window.EMBEDDED_STAGE_DATA.embarques).length > 0) {
-      database = JSON.parse(JSON.stringify(window.EMBEDDED_STAGE_DATA));
+  // Compara timestamps: se a base embutida do RPA/SharePoint for mais nova que o storage, usa a mais recente!
+  if (embedded && embedded.atualizado_em && customDb && customDb.atualizado_em) {
+    const tEmb = new Date(embedded.atualizado_em).getTime();
+    const tCust = new Date(customDb.atualizado_em).getTime();
+    if (tEmb >= tCust) {
+      database = JSON.parse(JSON.stringify(embedded));
+      try { localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(database)); } catch (e) {}
     } else {
-      database = { embarques: {} };
-      // Fallback assíncrono para stage_data.json se stage_data.js estiver em cache/atrasado
-      try {
-        fetch('stage_data.json?t=' + Date.now())
-          .then(r => r.ok ? r.json() : null)
-          .then(j => {
-            if (j && j.embarques && Object.keys(j.embarques).length > 0) {
-              database = j;
-              updateBaseInfoUI();
-              updateHistoryBadge();
-              if (typeof renderYardGrid === 'function') renderYardGrid();
-            }
-          }).catch(() => {});
-      } catch (e) {}
+      database = customDb;
     }
+  } else if (embedded && embedded.embarques && Object.keys(embedded.embarques).length > 0) {
+    database = JSON.parse(JSON.stringify(embedded));
+  } else if (customDb && customDb.embarques && Object.keys(customDb.embarques).length > 0) {
+    database = customDb;
+  } else {
+    database = { embarques: {} };
+    try {
+      fetch('stage_data.json?t=' + Date.now())
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (j && j.embarques && Object.keys(j.embarques).length > 0) {
+            database = j;
+            updateBaseInfoUI();
+            updateHistoryBadge();
+            if (typeof renderYardGrid === 'function') renderYardGrid();
+          }
+        }).catch(() => {});
+    } catch (e) {}
   }
 
   updateBaseInfoUI();
@@ -521,13 +523,13 @@ function loadData() {
 }
 
 window.limparBaseCustomizada = function() {
-  if (confirm('Deseja remover as planilhas customizadas carregadas e restaurar a base padrão de stage_data.js?')) {
+  if (confirm('Deseja restaurar a base original do SharePoint / stage_data.js?')) {
     localStorage.removeItem(STORAGE_DATABASE_OVERRIDE_KEY);
     loadData();
     if (document.getElementById('viewDashboard')?.style.display === 'block') {
       renderDashboard();
     }
-    showToast('Base customizada limpa. Restaurada base padrão.');
+    showToast('Base restaurada com sucesso para a versão do SharePoint.');
   }
 };
 
@@ -540,20 +542,33 @@ function updateBaseInfoUI() {
   }
   const total = uniqueEmbs.size;
   const navBadge = document.getElementById('navBaseCount');
+  
+  // Extrai data e hora amigáveis da atualização
+  let horaAtualizada = '';
+  if (database?.atualizado_em) {
+    try {
+      const dt = new Date(database.atualizado_em);
+      horaAtualizada = ' às ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch(e) {}
+  } else if (database?.gerado_em) {
+    horaAtualizada = ' às ' + database.gerado_em.split(' ')[1] || '';
+  }
+
   const dataHoje = new Date().toLocaleDateString('pt-BR');
-  const dataBase = database?.data_base || (database?.gerado_em ? database.gerado_em.split(' ')[0] : dataHoje);
+  const dataBase = database?.data_base || (database?.atualizado_em ? new Date(database.atualizado_em).toLocaleDateString('pt-BR') : dataHoje);
 
   if (navBadge) {
-    navBadge.textContent = `📊 Base (${dataBase}): ${total} Cargas`;
+    navBadge.textContent = `📊 Base: ${total} Cargas (${dataBase}${horaAtualizada})`;
   }
 
   const infoDetails = document.getElementById('infoBaseDetails');
   if (infoDetails) {
     infoDetails.innerHTML = `
-      <b>Data da Base Operacional:</b> ${dataBase} (Hoje: ${dataHoje})<br>
-      <b>Total de Registros de Embarques:</b> ${total}<br>
-      <b>Status de Sincronização:</b> Memória Local & Persistente Ativa.<br>
-      <b>Última Carga / Atualização:</b> ${database?.gerado_em || 'Recente'}
+      <b>Data da Base:</b> ${dataBase}${horaAtualizada}<br>
+      <b>Total de Cargas / Embarques:</b> ${total}<br>
+      <b>Total de Paletes:</b> ${database?.total_paletes || 'N/D'}<br>
+      <b>Origem dos Dados:</b> ${database?.origem || 'SharePoint Central de Dados OMS'}<br>
+      <b>Status de Sincronização:</b> Sincronizado ao vivo via RPA.
     `;
   }
 }

@@ -1147,11 +1147,13 @@
   <script src="mqtt.min.js"></script>
   <script>if (typeof mqtt === 'undefined') { document.write('<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"><\/script>'); }</script>
   <script src="xlsx.full.min.js"></script>
-  <script src="stage_data.js"></script>
-  <script src="consolidation_planner.js?v=20261015c"></script>
-  <script src="app.js?v=20261015c"></script>
-  <script src="stage_map.js?v=20261015c"></script>
-  <script src="powerbi_sync.js?v=20261015c"></script>
-  <script src="sync.js?v=20261015c"></script>
+  <script>
+    document.write('<script src="stage_data.js?t=' + Date.now() + '"><\/script>');
+  </script>
+  <script src="consolidation_planner.js?v=20261016b"></script>
+  <script src="app.js?v=20261016b"></script>
+  <script src="stage_map.js?v=20261016b"></script>
+  <script src="powerbi_sync.js?v=20261016b"></script>
+  <script src="sync.js?v=20261016b"></script>
 </body>
 </html>
