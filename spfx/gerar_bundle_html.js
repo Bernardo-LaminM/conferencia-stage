@@ -92,7 +92,8 @@ html = html.replace(/<script src="xlsx\.full\.min\.js"><\/script>/i, `<script sr
 
 // Injeta stage_data.js (base embutida) diretamente para carregamento instantâneo
 if (stageDataJs) {
-  html = html.replace(/<script src="stage_data\.js"><\/script>/i, `<script>\n${stageDataJs}\n</script>`);
+  html = html.replace(/<script>[\s\S]*?stage_data\.js[\s\S]*?<\/script>/i, `<script>\n${stageDataJs}\n</script>`);
+  html = html.replace(/<script src="stage_data\.js[^"]*"><\/script>/i, `<script>\n${stageDataJs}\n</script>`);
 }
 
 // Substitui TODOS os scripts da aplicação por scripts inline (usando regex tolerante a query string)

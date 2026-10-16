@@ -3563,7 +3563,7 @@ html, body {
                value="" placeholder="Digite seu nome (obrigatório)..." autocomplete="name">
       </div>
 
-      <button id="btnLogin" class="btn-clean-primary" disabled style="opacity: 0.45; cursor: not-allowed; padding: 14px; font-size: 1rem; font-weight: 800; border-radius: 8px; transition: all 0.2s;">
+      <button id="btnLogin" class="btn-clean-primary" style="padding: 14px; font-size: 1rem; font-weight: 800; border-radius: 8px; transition: all 0.2s; cursor: pointer;">
         ✔ Iniciar Conferência [ENTER]
       </button>
 
@@ -4330,6 +4330,34 @@ html, body {
       <!-- Feedback de Processamento do Upload -->
       <div id="uploadFeedback" style="display: none; margin-top: 16px;"></div>
 
+      <!-- Opção Direta via API: Extrair CSV do SharePoint (Central de Dados OMS) -->
+      <div style="background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 8px; padding: 14px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <div style="font-size: 0.88rem; font-weight: 800; color: #92400E; display: flex; align-items: center; gap: 6px;">
+            <span>📁</span> Extrair CSV do SharePoint (Central de Dados OMS)
+          </div>
+          <div style="font-size: 0.76rem; color: #B45309; margin-top: 2px;">
+            Lê o <code>ADHOC_80.csv</code> sincronizado e injeta na ferramenta em &lt; 1 segundo
+          </div>
+        </div>
+        <button type="button" class="btn-clean-primary" id="btnExtrairSharePointApi" style="margin-top: 0; width: auto; padding: 9px 18px; background: #D97706; font-weight: 700;" onclick="extrairCsvSharePoint()">
+          ⚡ Extrair CSV via API
+        </button>
+      </div>
+
+      <!-- Opção 100% no Navegador: Colar Texto do CSV Diretamente -->
+      <details style="margin-top: 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+        <summary style="font-size: 0.84rem; font-weight: 700; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <span>📋</span> Ou cole os dados do CSV diretamente aqui (100% no HTML)
+        </summary>
+        <div style="margin-top: 10px;">
+          <textarea id="txtCsvManual" rows="4" style="width: 100%; box-sizing: border-box; font-family: Consolas, monospace; font-size: 0.76rem; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px;" placeholder="Cole aqui o conteúdo do CSV (ex: [car_move_id],[ORDNUM],[PALLET_ID],[DSTLOC],[PRTNUM],[QTD_CAIXAS]...)"></textarea>
+          <button type="button" class="btn-clean-primary" style="margin-top: 8px; width: 100%; padding: 8px; font-size: 0.82rem; background: #0284C7;" onclick="processarTextoCsvColado()">
+            📥 Injetar CSV na Ferramenta Agora
+          </button>
+        </div>
+      </details>
+
       <!-- Opção Rápida via Power BI Live API (Code) -->
       <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 12px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
         <div>
@@ -4601,14 +4629,14 @@ html, body {
 
   <!-- Bibliotecas: MQTT para sincronização em tempo real na nuvem/GitHub e SheetJS para Excel -->
   <script src="mqtt.min.js"></script>
-  <script>if (typeof mqtt === 'undefined') { document.write('<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"><\/script>'); }</script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script>
 window.EMBEDDED_STAGE_DATA = {
-  "origem": "PowerAutomate_SharePoint_Live",
-  "atualizado_em": "2026-10-16T11:46:56.856Z",
+  "origem": "API_SharePoint_CSV",
+  "atualizado_em": "2026-10-16T18:17:39.688Z",
   "total_embarques": 241,
   "total_paletes": 16395,
+  "total_pecas": 621427,
+  "total_stages": 99,
   "embarques": {
     "12656763": {
       "embarque": "0012656763",
@@ -355860,41 +355888,43 @@ function persistActiveSession() {
    CARREGAMENTO E MESCLAGEM DA BASE DE DADOS
    ========================================================= */
 function loadData() {
-  // 1. Base customizada salva via Upload de Excel no navegador (prioridade operacional de hoje)
-  let loadedFromCustom = false;
+  const embedded = window.EMBEDDED_STAGE_DATA;
+  let customDb = null;
   try {
     const savedCustom = localStorage.getItem(STORAGE_DATABASE_OVERRIDE_KEY);
-    if (savedCustom) {
-      const customDb = JSON.parse(savedCustom);
-      if (customDb && customDb.embarques && Object.keys(customDb.embarques).length > 0) {
-        database = customDb;
-        loadedFromCustom = true;
-      }
-    }
+    if (savedCustom) customDb = JSON.parse(savedCustom);
   } catch(e) {
     console.warn('Erro ao carregar base salva no storage:', e);
   }
 
-  // 2. Base embutida (stage_data.js) caso não haja base customizada salva
-  if (!loadedFromCustom) {
-    if (window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques && Object.keys(window.EMBEDDED_STAGE_DATA.embarques).length > 0) {
-      database = JSON.parse(JSON.stringify(window.EMBEDDED_STAGE_DATA));
+  // Compara timestamps: se a base embutida do RPA/SharePoint for mais nova que o storage, usa a mais recente!
+  if (embedded && embedded.atualizado_em && customDb && customDb.atualizado_em) {
+    const tEmb = new Date(embedded.atualizado_em).getTime();
+    const tCust = new Date(customDb.atualizado_em).getTime();
+    if (tEmb >= tCust) {
+      database = JSON.parse(JSON.stringify(embedded));
+      try { localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(database)); } catch (e) {}
     } else {
-      database = { embarques: {} };
-      // Fallback assíncrono para stage_data.json se stage_data.js estiver em cache/atrasado
-      try {
-        fetch('stage_data.json?t=' + Date.now())
-          .then(r => r.ok ? r.json() : null)
-          .then(j => {
-            if (j && j.embarques && Object.keys(j.embarques).length > 0) {
-              database = j;
-              updateBaseInfoUI();
-              updateHistoryBadge();
-              if (typeof renderYardGrid === 'function') renderYardGrid();
-            }
-          }).catch(() => {});
-      } catch (e) {}
+      database = customDb;
     }
+  } else if (embedded && embedded.embarques && Object.keys(embedded.embarques).length > 0) {
+    database = JSON.parse(JSON.stringify(embedded));
+  } else if (customDb && customDb.embarques && Object.keys(customDb.embarques).length > 0) {
+    database = customDb;
+  } else {
+    database = { embarques: {} };
+    try {
+      fetch('stage_data.json?t=' + Date.now())
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          if (j && j.embarques && Object.keys(j.embarques).length > 0) {
+            database = j;
+            updateBaseInfoUI();
+            updateHistoryBadge();
+            if (typeof renderYardGrid === 'function') renderYardGrid();
+          }
+        }).catch(() => {});
+    } catch (e) {}
   }
 
   updateBaseInfoUI();
@@ -355902,13 +355932,13 @@ function loadData() {
 }
 
 window.limparBaseCustomizada = function() {
-  if (confirm('Deseja remover as planilhas customizadas carregadas e restaurar a base padrão de stage_data.js?')) {
+  if (confirm('Deseja restaurar a base original do SharePoint / stage_data.js?')) {
     localStorage.removeItem(STORAGE_DATABASE_OVERRIDE_KEY);
     loadData();
     if (document.getElementById('viewDashboard')?.style.display === 'block') {
       renderDashboard();
     }
-    showToast('Base customizada limpa. Restaurada base padrão.');
+    showToast('Base restaurada com sucesso para a versão do SharePoint.');
   }
 };
 
@@ -355921,20 +355951,33 @@ function updateBaseInfoUI() {
   }
   const total = uniqueEmbs.size;
   const navBadge = document.getElementById('navBaseCount');
+  
+  // Extrai data e hora amigáveis da atualização
+  let horaAtualizada = '';
+  if (database?.atualizado_em) {
+    try {
+      const dt = new Date(database.atualizado_em);
+      horaAtualizada = ' às ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch(e) {}
+  } else if (database?.gerado_em) {
+    horaAtualizada = ' às ' + database.gerado_em.split(' ')[1] || '';
+  }
+
   const dataHoje = new Date().toLocaleDateString('pt-BR');
-  const dataBase = database?.data_base || (database?.gerado_em ? database.gerado_em.split(' ')[0] : dataHoje);
+  const dataBase = database?.data_base || (database?.atualizado_em ? new Date(database.atualizado_em).toLocaleDateString('pt-BR') : dataHoje);
 
   if (navBadge) {
-    navBadge.textContent = `📊 Base (${dataBase}): ${total} Cargas`;
+    navBadge.textContent = `📊 Base: ${total} Cargas (${dataBase}${horaAtualizada})`;
   }
 
   const infoDetails = document.getElementById('infoBaseDetails');
   if (infoDetails) {
     infoDetails.innerHTML = `
-      <b>Data da Base Operacional:</b> ${dataBase} (Hoje: ${dataHoje})<br>
-      <b>Total de Registros de Embarques:</b> ${total}<br>
-      <b>Status de Sincronização:</b> Memória Local & Persistente Ativa.<br>
-      <b>Última Carga / Atualização:</b> ${database?.gerado_em || 'Recente'}
+      <b>Data da Base:</b> ${dataBase}${horaAtualizada}<br>
+      <b>Total de Cargas / Embarques:</b> ${total}<br>
+      <b>Total de Paletes:</b> ${database?.total_paletes || 'N/D'}<br>
+      <b>Origem dos Dados:</b> ${database?.origem || 'SharePoint Central de Dados OMS'}<br>
+      <b>Status de Sincronização:</b> Sincronizado ao vivo via RPA.
     `;
   }
 }
@@ -355950,15 +355993,158 @@ function showToast(message, duration = 4000) {
 }
 
 /* =========================================================
-   PARSER DE PLANILHAS EXCEL (TABULAR + GUIA + WMS)
+   PARSER NATIVO DE CSV DIRETO NO NAVEGADOR (SEM DEPENDÊNCIAS)
+   ========================================================= */
+function parseDirectCsvText(csvText) {
+  if (!csvText) return {};
+  if (csvText.charCodeAt(0) === 0xFEFF) csvText = csvText.slice(1);
+
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) return {};
+
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.replace(/[\[\]'"]/g, '').trim().toLowerCase());
+
+  let idxEmb = -1, idxPal = -1, idxStage = -1, idxSku = -1, idxQtd = -1, idxOrd = -1, idxLote = -1;
+  headers.forEach((h, idx) => {
+    if (h.includes('car_move') || h.includes('embarque') || h.includes('carmove')) idxEmb = idx;
+    if (h.includes('pallet') || h.includes('palete') || h.includes('lpn') || h.includes('etiqueta')) idxPal = idx;
+    if (h.includes('stage') || h.includes('dstloc') || h.includes('destino')) idxStage = idx;
+    if (h.includes('sku') || h.includes('prtnum') || h.includes('material')) idxSku = idx;
+    if (h.includes('qtd') || h.includes('caixa') || h.includes('quantidade') || h.includes('pckqty')) idxQtd = idx;
+    if (h.includes('ordnum') || h.includes('order')) idxOrd = idx;
+    if (h.includes('lote') || h.includes('lotnum')) idxLote = idx;
+  });
+
+  if (idxEmb === -1 || idxPal === -1) {
+    idxEmb = 0; idxOrd = 1; idxPal = 2; idxStage = 3; idxSku = 4; idxQtd = 5;
+  }
+
+  const dict = {};
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(sep);
+    const embId = (parts[idxEmb] || '').trim();
+    const palId = (parts[idxPal] || '').trim();
+    if (!embId || !palId) continue;
+
+    const ordNum = idxOrd !== -1 ? (parts[idxOrd] || '').trim() : '';
+    const stage = idxStage !== -1 ? (parts[idxStage] || '').trim() : '';
+    const sku = idxSku !== -1 ? (parts[idxSku] || '').trim() : '';
+    const lote = idxLote !== -1 ? (parts[idxLote] || '').trim() : '';
+    const qtd = idxQtd !== -1 ? (parseInt(parts[idxQtd], 10) || 0) : 0;
+
+    if (!dict[embId]) {
+      dict[embId] = {
+        embarque: embId,
+        total_paletes: 0,
+        total_pecas: 0,
+        stages: new Set(),
+        pal: new Map()
+      };
+    }
+
+    const e = dict[embId];
+    if (stage) e.stages.add(stage);
+
+    if (!e.pal.has(palId)) {
+      e.pal.set(palId, {
+        palete: palId,
+        stage: stage,
+        order_num: ordNum,
+        lote: lote,
+        itens: [],
+        qtd_total: 0,
+        sku_resumo: sku || 'Material',
+        desc_resumo: sku ? 'SKU ' + sku : 'Material'
+      });
+    }
+
+    const p = e.pal.get(palId);
+    p.itens.push({
+      sku: sku,
+      desc_produto: sku ? 'SKU ' + sku : 'Material',
+      lote: lote,
+      qtd: qtd,
+      order_num: ordNum
+    });
+    p.qtd_total += qtd;
+    e.total_pecas += qtd;
+  }
+
+  const out = {};
+  Object.values(dict).forEach(e => {
+    const paletes = Array.from(e.pal.values());
+    out[e.embarque] = {
+      embarque: e.embarque,
+      total_paletes: paletes.length,
+      total_pecas: e.total_pecas,
+      stages: Array.from(e.stages),
+      paletes: paletes
+    };
+    const alias = e.embarque.replace(/^0+/, '');
+    if (alias && alias !== e.embarque) {
+      out[alias] = out[e.embarque];
+    }
+  });
+
+  return out;
+}
+
+window.processarTextoCsvColado = function() {
+  const textarea = document.getElementById('txtCsvManual');
+  if (!textarea || !textarea.value.trim()) {
+    if (typeof showToast === 'function') showToast('Cole o conteúdo do CSV primeiro.');
+    return;
+  }
+
+  try {
+    const parsed = parseDirectCsvText(textarea.value);
+    const count = Object.keys(parsed).length;
+    if (count === 0) {
+      throw new Error('Não foi possível identificar colunas válidas no CSV colado.');
+    }
+    injetarParsedEmbarquesNoSistema(parsed, 'CSV_Colado_Direto.csv', false);
+    if (typeof showToast === 'function') {
+      showToast(`✔ CSV colado processado! ${count} embarques carregados no sistema.`);
+    }
+    textarea.value = '';
+  } catch (err) {
+    if (typeof showToast === 'function') showToast('❌ Erro no CSV: ' + err.message);
+  }
+};
+
+/* =========================================================
+   PARSER DE PLANILHAS EXCEL & CSV (TABULAR + GUIA + WMS)
    ========================================================= */
 function processExcelFile(file) {
   const feedback = document.getElementById('uploadFeedback');
   if (feedback) {
     feedback.style.display = 'block';
-    feedback.innerHTML = `<div style="color: var(--text-secondary); padding: 10px;">⏳ Lendo e processando planilha <b>${file.name}</b>...</div>`;
+    feedback.innerHTML = `<div style="color: var(--text-secondary); padding: 10px;">⏳ Lendo e processando <b>${file.name}</b>...</div>`;
   }
 
+  // 1. Processamento ultra-rápido nativo se for arquivo .CSV
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    const textReader = new FileReader();
+    textReader.onload = function(ev) {
+      try {
+        const text = ev.target.result;
+        const parsedEmbarques = parseDirectCsvText(text);
+        if (Object.keys(parsedEmbarques).length === 0) {
+          throw new Error('Não foi possível identificar dados no CSV. Verifique os cabeçalhos.');
+        }
+        injetarParsedEmbarquesNoSistema(parsedEmbarques, file.name, false);
+      } catch (err) {
+        if (feedback) {
+          feedback.innerHTML = `<div style="background: var(--status-diverg-bg); border: 1px solid var(--status-diverg-border); color: #B91C1C; padding: 14px; border-radius: var(--radius-sm);"><b>❌ Erro ao ler CSV:</b> ${err.message}</div>`;
+        }
+      }
+    };
+    textReader.readAsText(file, 'utf-8');
+    return;
+  }
+
+  // 2. Processamento via SheetJS para planilhas .XLSX / .XLS
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
@@ -355993,26 +356179,38 @@ function processExcelFile(file) {
         parsedEmbarques = parseWmsWorkbook(workbook);
       }
 
-      const embKeys = Object.keys(parsedEmbarques);
-      if (embKeys.length === 0) {
-        throw new Error('Não foi possível identificar dados de embarque/paletes nesta planilha. Verifique o formato.');
+      injetarParsedEmbarquesNoSistema(parsedEmbarques, file.name, isGuia);
+    } catch(err) {
+      if (feedback) {
+        feedback.innerHTML = `<div style="background: var(--status-diverg-bg); border: 1px solid var(--status-diverg-border); color: #B91C1C; padding: 14px; border-radius: var(--radius-sm);"><b>❌ Erro ao processar arquivo:</b> ${err.message}</div>`;
       }
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
 
-      // 1. Mapear stage -> embarque anterior
-      const prevStageEmbarque = {};
-      if (database && database.embarques) {
-        Object.values(database.embarques).forEach(e => {
-          if (e && e.embarque && e.stages) {
-            const sList = Array.isArray(e.stages) ? e.stages : String(e.stages).split(/[\s,]+/);
-            sList.forEach(s => {
-              const norm = normalizeStageName(s);
-              if (norm) prevStageEmbarque[norm] = e.embarque;
-            });
-          }
+function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = false) {
+  const feedback = document.getElementById('uploadFeedback');
+  const embKeys = Object.keys(parsedEmbarques);
+  if (embKeys.length === 0) {
+    throw new Error('Não foi possível identificar dados de embarque/paletes. Verifique o formato.');
+  }
+
+  // 1. Mapear stage -> embarque anterior
+  const prevStageEmbarque = {};
+  if (database && database.embarques) {
+    Object.values(database.embarques).forEach(e => {
+      if (e && e.embarque && e.stages) {
+        const sList = Array.isArray(e.stages) ? e.stages : String(e.stages).split(/[\s,]+/);
+        sList.forEach(s => {
+          const norm = normalizeStageName(s);
+          if (norm) prevStageEmbarque[norm] = e.embarque;
         });
       }
+    });
+  }
 
-      // 2. Mapear stage -> novo embarque na planilha carregada
+  // 2. Mapear stage -> novo embarque na planilha carregada
       const newStageEmbarque = {};
       Object.values(parsedEmbarques).forEach(e => {
         if (e && e.embarque && e.stages) {
@@ -356073,7 +356271,7 @@ function processExcelFile(file) {
           total_embarques: embKeys.length,
           data_base: dataHoje,
           gerado_em: dataHoraHoje,
-          arquivo_origem: file.name,
+          arquivo_origem: nomeOrigem,
           embarques: parsedEmbarques
         };
       } else {
@@ -356081,7 +356279,7 @@ function processExcelFile(file) {
         if (!database) database = { embarques: {} };
         database.data_base = dataHoje;
         database.gerado_em = dataHoraHoje;
-        database.arquivo_origem = file.name;
+        database.arquivo_origem = nomeOrigem;
         embKeys.forEach(embId => {
           database.embarques[embId] = parsedEmbarques[embId];
         });
@@ -356108,7 +356306,7 @@ function processExcelFile(file) {
       // Grava snapshot na Evolução da Base
       const evolSnapshot = {
         data: dataHoraHoje,
-        arquivo: file.name,
+        arquivo: nomeOrigem,
         totalEmbarques: uniqueCount,
         totalPaletes: totalPaletesDepois,
         detalhes: `Upload de hoje processado: ${embKeys.length} embarques sincronizados. ${stagesMantidos} stages com mesmo embarque mantidos, ${stagesResetados} stages atualizados/resetados de acordo com a planilha.`
@@ -356124,7 +356322,7 @@ function processExcelFile(file) {
 
       // Sincroniza a nova base com todos os operadores na nuvem / GitHub Pages em tempo real!
       if (window.DHL_SYNC && typeof window.DHL_SYNC.notifyBaseUpdated === 'function') {
-        window.DHL_SYNC.notifyBaseUpdated(file.name, database);
+        window.DHL_SYNC.notifyBaseUpdated(nomeOrigem, database);
       }
 
       // Se havia conferência ativa deste embarque, sincroniza o activeEmbarque
@@ -356145,7 +356343,7 @@ function processExcelFile(file) {
         feedback.innerHTML = `
           <div style="background: var(--status-ok-bg); border: 1px solid var(--status-ok-border); color: #065F46; padding: 14px; border-radius: var(--radius-sm); font-size: 0.9rem;">
             <b>✔ Importação Concluída com Sucesso!</b><br>
-            • Arquivo: <b>${file.name}</b><br>
+            • Origem: <b>${nomeOrigem}</b><br>
             • Embarques no Arquivo: <b>${embKeys.length}</b> (Total Únicos na Base: ${uniqueCount})<br>
             • Data da Base: <b>${dataHoje}</b><br>
             • Stages Mantidos: <b>${stagesMantidos}</b> | Stages Atualizados/Resetados: <b>${stagesResetados}</b><br>
@@ -356172,19 +356370,6 @@ function processExcelFile(file) {
       if (inputEmb && !inputEmb.value) {
         inputEmb.value = firstEmb;
       }
-
-    } catch(err) {
-      console.error(err);
-      if (feedback) {
-        feedback.innerHTML = `
-          <div style="background: var(--status-err-bg); border: 1px solid var(--status-err-border); color: #991B1B; padding: 12px; border-radius: var(--radius-sm); font-size: 0.88rem;">
-            <b>✖ Erro ao processar planilha:</b> ${err.message}
-          </div>
-        `;
-      }
-    }
-  };
-  reader.readAsArrayBuffer(file);
 }
 
 function parseGuiaConferenciaSheet(rows) {
@@ -358185,19 +358370,24 @@ function entrarNoEmbarque() {
   const input = document.getElementById('inputEmbarque');
   let embId = input ? input.value.trim() : '';
   const opInput = document.getElementById('inputOperador');
-  const operador = opInput ? opInput.value.trim() : '';
+  let operador = opInput ? opInput.value.trim() : '';
 
   if (!embId) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Digite ou bipe o número do embarque para iniciar!');
+    }
     if (input) input.focus();
     return;
   }
 
+  // Se o conferente não foi informado, usa o último salvo ou 'Conferente DHL'
   if (!operador) {
-    sound.playError('Informe o conferente');
-    alert('Por favor, digite o nome do Conferente / Operador para iniciar a conferência!');
-    if (opInput) opInput.focus();
-    return;
+    operador = localStorage.getItem('dhl_last_operator') || 'Conferente DHL';
+    if (opInput) opInput.value = operador;
   }
+  try {
+    localStorage.setItem('dhl_last_operator', operador);
+  } catch (e) {}
 
   const buscaRes = window.localizarEmbarqueUniversal(embId);
 
@@ -360835,49 +361025,42 @@ function initApp() {
   const inputOp = document.getElementById('inputOperador');
   const btnLogin = document.getElementById('btnLogin');
 
+  const savedOperator = localStorage.getItem('dhl_last_operator') || '';
+  if (inputOp && savedOperator) {
+    inputOp.value = savedOperator;
+  }
+
   function atualizarStatusBotaoLogin() {
     const hasEmb = !!(inputEmb?.value.trim());
-    const hasOp = !!(inputOp?.value.trim());
     if (btnLogin) {
-      if (hasEmb && hasOp) {
-        btnLogin.disabled = false;
+      btnLogin.disabled = false;
+      if (hasEmb) {
         btnLogin.style.opacity = '1';
         btnLogin.style.cursor = 'pointer';
       } else {
-        btnLogin.disabled = true;
-        btnLogin.style.opacity = '0.45';
-        btnLogin.style.cursor = 'not-allowed';
+        btnLogin.style.opacity = '0.75';
+        btnLogin.style.cursor = 'pointer';
       }
     }
   }
 
   if (inputEmb) {
-    inputEmb.value = '';
     inputEmb.focus();
     inputEmb.addEventListener('input', atualizarStatusBotaoLogin);
     inputEmb.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (!inputOp?.value.trim()) {
-          if (inputOp) inputOp.focus();
-        } else {
-          entrarNoEmbarque();
-        }
+        entrarNoEmbarque();
       }
     });
   }
 
   if (inputOp) {
-    inputOp.value = '';
     inputOp.addEventListener('input', atualizarStatusBotaoLogin);
     inputOp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (!inputEmb?.value.trim()) {
-          if (inputEmb) inputEmb.focus();
-        } else {
-          entrarNoEmbarque();
-        }
+        entrarNoEmbarque();
       }
     });
   }
@@ -361322,6 +361505,92 @@ window.toggleAppFullscreen = function() {
     }
   }
 };
+
+/* =========================================================
+   INTEGRAÇÃO LIVE: EXTRAIR CSV DO SHAREPOINT VIA API REST
+   ========================================================= */
+window.extrairCsvSharePoint = async function() {
+  const btn = document.getElementById('btnExtrairSharePointApi');
+  const originalText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Extraindo do CSV...';
+  }
+
+  if (typeof showToast === 'function') {
+    showToast('Iniciando extração do CSV do SharePoint via API...');
+  }
+
+  try {
+    const res = await fetch('/api/extrair-csv?include_data=1', { cache: 'no-cache' });
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      throw new Error(data.message || data.error || 'Falha ao extrair CSV.');
+    }
+
+    if (data.database && data.database.embarques) {
+      window.database = data.database;
+      try {
+        localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(data.database));
+      } catch (e) {}
+    } else {
+      const r2 = await fetch('stage_data.json?t=' + Date.now());
+      if (r2.ok) {
+        const j2 = await r2.json();
+        window.database = j2;
+        try { localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(j2)); } catch (e) {}
+      }
+    }
+
+    if (typeof loadData === 'function') loadData();
+    if (typeof updateBaseInfoUI === 'function') updateBaseInfoUI();
+    if (typeof renderYardGrid === 'function') renderYardGrid();
+    if (typeof renderDashboard === 'function' && document.getElementById('viewDashboard')?.style.display === 'block') {
+      renderDashboard();
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(`✔ Base atualizada! ${data.total_embarques} embarques e ${data.total_paletes} paletes carregados.`, 5000);
+    }
+
+    const feedback = document.getElementById('uploadFeedback');
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.innerHTML = `
+        <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 12px; color: #166534; font-size: 0.85rem; margin-top: 10px;">
+          <b>✔ Extração do CSV Concluída em ${data.tempo_processamento_ms || 0}ms!</b><br>
+          • Total de Embarques: <b>${data.total_embarques}</b><br>
+          • Total de Paletes: <b>${data.total_paletes}</b><br>
+          • Total de Peças: <b>${data.total_pecas || 0}</b><br>
+          • Stages Mapeados: <b>${data.total_stages || 0}</b><br>
+          • Origem: <code>${data.arquivo || 'SharePoint ADHOC_80.csv'}</code>
+        </div>
+      `;
+    }
+  } catch (err) {
+    console.error('Erro na extração do CSV:', err);
+    if (typeof showToast === 'function') {
+      showToast('❌ Erro: ' + err.message, 6000);
+    }
+    const feedback = document.getElementById('uploadFeedback');
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.innerHTML = `
+        <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 8px; padding: 12px; color: #991B1B; font-size: 0.85rem; margin-top: 10px;">
+          <b>❌ Falha na Extração do CSV:</b> ${err.message}<br>
+          <small>Verifique se o SharePoint está sincronizado no PC ou se o servidor Node.js está ativo.</small>
+        </div>
+      `;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+};
+
 
 
 </script>
