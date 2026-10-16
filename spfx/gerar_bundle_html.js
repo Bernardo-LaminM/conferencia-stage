@@ -86,6 +86,45 @@ if (juntosB64) {
 
 const stageDataJsPath = path.join(baseDir, 'stage_data.js');
 const stageDataJs = fs.existsSync(stageDataJsPath) ? fs.readFileSync(stageDataJsPath, 'utf8') : '';
+const mqttJsPath = path.join(baseDir, 'mqtt.min.js');
+const mqttJs = fs.existsSync(mqttJsPath) ? fs.readFileSync(mqttJsPath, 'utf8') : '';
+
+// Garante que o localStorage funcione mesmo em iframes sandbox do SharePoint
+const storageGuard = `
+<script id="dhl-storage-guard">
+(function() {
+  try {
+    var k = '__dhl_spfx_test__';
+    window.localStorage.setItem(k, k);
+    window.localStorage.removeItem(k);
+  } catch(e) {
+    console.warn('[SPFx Storage Guard] localStorage bloqueado pelo SharePoint/iframe, ativando fallback em memória.');
+    var _mem = {};
+    try {
+      Object.defineProperty(window, 'localStorage', {
+        value: {
+          getItem: function(k) { return _mem.hasOwnProperty(k) ? _mem[k] : null; },
+          setItem: function(k, v) { _mem[k] = String(v); },
+          removeItem: function(k) { delete _mem[k]; },
+          clear: function() { _mem = {}; },
+          key: function(i) { return Object.keys(_mem)[i] || null; },
+          get length() { return Object.keys(_mem).length; }
+        },
+        writable: true,
+        configurable: true
+      });
+    } catch(err2) {}
+  }
+})();
+</script>
+`;
+html = html.replace(/<head>/i, `<head>\n${storageGuard}`);
+
+// Injeta MQTT inline e remove fallbacks com document.write de CDN externo
+if (mqttJs) {
+  html = html.replace(/<script src="mqtt\.min\.js"><\/script>/i, `<script>\n${mqttJs}\n</script>`);
+}
+html = html.replace(/<script>if \(typeof mqtt === 'undefined'\)[\s\S]*?<\/script>/i, '');
 
 // XLSX via CDN oficial Cloudflare (permitida pela CSP da DHL)
 html = html.replace(/<script src="xlsx\.full\.min\.js"><\/script>/i, `<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>`);
