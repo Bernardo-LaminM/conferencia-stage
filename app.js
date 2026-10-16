@@ -785,15 +785,8 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
       }
     });
   }
-            sList.forEach(s => {
-              const norm = normalizeStageName(s);
-              if (norm) prevStageEmbarque[norm] = e.embarque;
-            });
-          }
-        });
-      }
 
-      // 2. Mapear stage -> novo embarque na planilha carregada
+  // 2. Mapear stage -> novo embarque na planilha carregada
       const newStageEmbarque = {};
       Object.values(parsedEmbarques).forEach(e => {
         if (e && e.embarque && e.stages) {
@@ -953,19 +946,6 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
       if (inputEmb && !inputEmb.value) {
         inputEmb.value = firstEmb;
       }
-
-    } catch(err) {
-      console.error(err);
-      if (feedback) {
-        feedback.innerHTML = `
-          <div style="background: var(--status-err-bg); border: 1px solid var(--status-err-border); color: #991B1B; padding: 12px; border-radius: var(--radius-sm); font-size: 0.88rem;">
-            <b>✖ Erro ao processar planilha:</b> ${err.message}
-          </div>
-        `;
-      }
-    }
-  };
-  reader.readAsArrayBuffer(file);
 }
 
 function parseGuiaConferenciaSheet(rows) {
