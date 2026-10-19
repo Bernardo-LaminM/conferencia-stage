@@ -1,5 +1,5 @@
-/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.15 */
-define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.15", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
+/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.16 */
+define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.16", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
   var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
       extendStatics = Object.setPrototypeOf ||
