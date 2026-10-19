@@ -1,5 +1,5 @@
-/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.25 */
-define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.25", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
+/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.26 */
+define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.26", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
   var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
       extendStatics = Object.setPrototypeOf ||
@@ -7856,18 +7856,10 @@ function pathFromUrl(str) {
     var stages = Object.keys(map).map(function (id) {
       var s = map[id], by = {}, loose = [], ec = {}, over = 0;
       s.items.forEach(function (it) { if (it.emb) ec[it.emb] = (ec[it.emb] || 0) + 1; if (it.pos) (by[it.pos] = by[it.pos] || []).push(it); else loose.push(it); });
-      var looseIdx = 0;
       loose.forEach(function (it) {
         var p = P.filter(function (q) { return !by[q]; })[0];
-        if (p) {
-          by[p] = [it];
-        } else {
-          var targetSlot = P[looseIdx % P.length];
-          if (!by[targetSlot]) by[targetSlot] = [];
-          by[targetSlot].push(it);
-          looseIdx++;
-          over++;
-        }
+        if (p) by[p] = [it];
+        else over++;
       });
       var slots = P.filter(function (q) { return by[q]; }).map(function (q) {
         var g = by[q], f = g[0], x = { pos: q, status: worst(g), lpn: f.lpn, sku: f.sku, lote: f.lote, qtd: f.qtd, cap: f.cap, desc: f.desc };
@@ -8135,6 +8127,10 @@ function pathFromUrl(str) {
       if (occ.length) k.ocup++; else k.livre++;
       if (blocked(s)) k.bloq++;
       occ.forEach(function (x) { var n = x.paletes && x.paletes.length > 1 ? x.paletes.length : 1; k.pal += n; if (k[x.status] != null) k[x.status] += n; });
+      if (s.excedente) {
+        k.pal += s.excedente;
+        k.aguardando += s.excedente;
+      }
     });
     return k;
   }

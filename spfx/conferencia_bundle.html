@@ -12293,18 +12293,10 @@ function pathFromUrl(str) {
     var stages = Object.keys(map).map(function (id) {
       var s = map[id], by = {}, loose = [], ec = {}, over = 0;
       s.items.forEach(function (it) { if (it.emb) ec[it.emb] = (ec[it.emb] || 0) + 1; if (it.pos) (by[it.pos] = by[it.pos] || []).push(it); else loose.push(it); });
-      var looseIdx = 0;
       loose.forEach(function (it) {
         var p = P.filter(function (q) { return !by[q]; })[0];
-        if (p) {
-          by[p] = [it];
-        } else {
-          var targetSlot = P[looseIdx % P.length];
-          if (!by[targetSlot]) by[targetSlot] = [];
-          by[targetSlot].push(it);
-          looseIdx++;
-          over++;
-        }
+        if (p) by[p] = [it];
+        else over++;
       });
       var slots = P.filter(function (q) { return by[q]; }).map(function (q) {
         var g = by[q], f = g[0], x = { pos: q, status: worst(g), lpn: f.lpn, sku: f.sku, lote: f.lote, qtd: f.qtd, cap: f.cap, desc: f.desc };
@@ -12572,6 +12564,10 @@ function pathFromUrl(str) {
       if (occ.length) k.ocup++; else k.livre++;
       if (blocked(s)) k.bloq++;
       occ.forEach(function (x) { var n = x.paletes && x.paletes.length > 1 ? x.paletes.length : 1; k.pal += n; if (k[x.status] != null) k[x.status] += n; });
+      if (s.excedente) {
+        k.pal += s.excedente;
+        k.aguardando += s.excedente;
+      }
     });
     return k;
   }
