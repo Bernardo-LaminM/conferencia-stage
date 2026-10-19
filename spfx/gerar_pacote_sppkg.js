@@ -19,7 +19,7 @@ if (!fs.existsSync(solutionDir)) fs.mkdirSync(solutionDir, { recursive: true });
 const FEATURE_ID = 'c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12';
 const PRODUCT_ID = '9e7c3b21-4f8a-4932-a567-8b1c2d3e4f50';
 const ASSETS_FEATURE_ID = 'f16e9e70-88b2-47c6-bb39-977f5e2337c7';
-const COMPONENT_VERSION = '1.0.0.16';
+const COMPONENT_VERSION = '1.0.0.24';
 const JS_BUNDLE_NAME = `conferencia-stage-web-part_${COMPONENT_VERSION}.js`;
 
 // Subpasta da Feature para o elemento WebPart
@@ -182,20 +182,25 @@ const bodyStart = bundleHtmlContent.indexOf('<body');
 const bodyContentStart = bundleHtmlContent.indexOf('>', bodyStart) + 1;
 const bodyEnd = bundleHtmlContent.lastIndexOf('</body>');
 const fullBody = bundleHtmlContent.slice(bodyContentStart, bodyEnd);
-const bodyHtmlWithoutScripts = fullBody.replace(/<script[\s\S]*?<\/script>/gi, '');
+function sanitizeInlineEventAttrs(str) {
+  return String(str || '').replace(/(\s)(on(?:click|change|input|submit|keydown))\s*=\s*(["'])/gi, '$1data-csp-$2=$3');
+}
+
+const bodyHtmlWithoutScripts = sanitizeInlineEventAttrs(fullBody.replace(/<script[\s\S]*?<\/script>/gi, ''));
 
 // Lê os módulos de script originais
 const baseDir = path.join(spfxDir, '..');
 const stageDataJs = fs.existsSync(path.join(baseDir, 'stage_data.js')) ? fs.readFileSync(path.join(baseDir, 'stage_data.js'), 'utf8') : '';
-const consolidationJs = fs.existsSync(path.join(baseDir, 'consolidation_planner.js')) ? fs.readFileSync(path.join(baseDir, 'consolidation_planner.js'), 'utf8') : '';
-const appJs = fs.existsSync(path.join(baseDir, 'app.js')) ? fs.readFileSync(path.join(baseDir, 'app.js'), 'utf8') : '';
+const databaseStorageJs = fs.existsSync(path.join(baseDir, 'database_storage.js')) ? fs.readFileSync(path.join(baseDir, 'database_storage.js'), 'utf8') : '';
+const consolidationJs = fs.existsSync(path.join(baseDir, 'consolidation_planner.js')) ? sanitizeInlineEventAttrs(fs.readFileSync(path.join(baseDir, 'consolidation_planner.js'), 'utf8')) : '';
+const appJs = fs.existsSync(path.join(baseDir, 'app.js')) ? sanitizeInlineEventAttrs(fs.readFileSync(path.join(baseDir, 'app.js'), 'utf8')) : '';
 const stageMapJs = fs.existsSync(path.join(baseDir, 'stage_map.js')) ? fs.readFileSync(path.join(baseDir, 'stage_map.js'), 'utf8') : '';
-const powerBiSyncJs = fs.existsSync(path.join(baseDir, 'powerbi_sync.js')) ? fs.readFileSync(path.join(baseDir, 'powerbi_sync.js'), 'utf8') : '';
+const powerBiSyncJs = fs.existsSync(path.join(baseDir, 'powerbi_sync.js')) ? sanitizeInlineEventAttrs(fs.readFileSync(path.join(baseDir, 'powerbi_sync.js'), 'utf8')) : '';
 const syncJs = fs.existsSync(path.join(baseDir, 'sync.js')) ? fs.readFileSync(path.join(baseDir, 'sync.js'), 'utf8') : '';
 const xlsxJs = fs.existsSync(path.join(baseDir, 'xlsx.full.min.js')) ? fs.readFileSync(path.join(baseDir, 'xlsx.full.min.js'), 'utf8') : '';
 const mqttJs = fs.existsSync(path.join(baseDir, 'mqtt.min.js')) ? fs.readFileSync(path.join(baseDir, 'mqtt.min.js'), 'utf8') : '';
 
-// 12. ClientSideAssets/conferencia-stage-web-part_1.0.0.15.js (Módulo AMD SPFx Nativo 100% no DOM)
+// 12. ClientSideAssets/conferencia-stage-web-part_1.0.0.17.js (Módulo AMD SPFx Nativo 100% no DOM)
 const bundleJs = `/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v${COMPONENT_VERSION} */
 define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
   var __extends = (this && this.__extends) || (function () {
@@ -228,110 +233,155 @@ define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@mi
     };
 
     ConferenciaStageWebPart.prototype._removeSharePointPadding = function () {
-      var selectors = [
-        '[data-automation-id="CanvasZone"]',
-        '[data-automation-id="CanvasComponent"]',
-        '[data-automation-id="CanvasControl"]',
-        '[data-automation-id="CanvasSection"]',
-        '.CanvasZoneContainer',
-        '.CanvasZone',
-        '.CanvasSection',
-        '.CanvasSection-col',
-        '.CanvasComponent',
-        '.SPCanvas',
-        '.controlZone',
-        '.CanvasColumn',
-        '[class*="CanvasZone"]',
-        '[class*="CanvasSection"]',
-        '[class*="CanvasColumn"]',
-        '[class*="controlZone"]',
-        '[class*="CanvasComponent"]'
-      ];
-
-      this.domElement.style.setProperty('width', '100%', 'important');
-      this.domElement.style.setProperty('max-width', '100%', 'important');
-      this.domElement.style.setProperty('margin', '0', 'important');
-      this.domElement.style.setProperty('padding', '0', 'important');
-      this.domElement.style.setProperty('overflow', 'visible', 'important');
-
       var self = this;
-      selectors.forEach(function (sel) {
-        var el = self.domElement.closest(sel);
-        if (el) {
-          el.style.setProperty('padding-left', '0', 'important');
-          el.style.setProperty('padding-right', '0', 'important');
-          el.style.setProperty('padding-top', '0', 'important');
-          el.style.setProperty('padding-bottom', '0', 'important');
-          el.style.setProperty('max-width', '100%', 'important');
-          el.style.setProperty('width', '100%', 'important');
-          el.style.setProperty('margin', '0', 'important');
-          el.style.setProperty('overflow', 'visible', 'important');
-          el.style.setProperty('overflow-x', 'visible', 'important');
-        }
-      });
+      var applyFullBleed = function () {
+        if (!self.domElement) return;
+        self.domElement.style.setProperty('width', '100%', 'important');
+        self.domElement.style.setProperty('max-width', '100%', 'important');
+        self.domElement.style.setProperty('margin', '0', 'important');
+        self.domElement.style.setProperty('padding', '0', 'important');
+        self.domElement.style.setProperty('overflow', 'visible', 'important');
 
-      if (this.domElement.parentElement) {
-        this.domElement.parentElement.style.setProperty('margin', '0', 'important');
-        this.domElement.parentElement.style.setProperty('padding', '0', 'important');
-        this.domElement.parentElement.style.setProperty('max-width', '100%', 'important');
-        this.domElement.parentElement.style.setProperty('width', '100%', 'important');
-        this.domElement.parentElement.style.setProperty('overflow', 'visible', 'important');
+        for (var n = self.domElement; n && n !== document.body; n = n.parentElement) {
+          var cls = (typeof n.className === 'string' ? n.className : '') || '';
+          var id = n.id || '';
+          var tag = n.tagName || '';
+          if (id !== 'SuiteNavWrapper' && cls.indexOf('suiteBar') === -1) {
+            if (
+              cls.indexOf('Canvas') !== -1 ||
+              cls.indexOf('controlZone') !== -1 ||
+              cls.indexOf('column') !== -1 ||
+              cls.indexOf('section') !== -1 ||
+              cls.indexOf('component') !== -1 ||
+              cls.indexOf('Zone') !== -1 ||
+              cls.indexOf('WebPart') !== -1 ||
+              cls.indexOf('webpart') !== -1 ||
+              cls.indexOf('Page') !== -1 ||
+              cls.indexOf('page') !== -1 ||
+              cls.indexOf('Content') !== -1 ||
+              cls.indexOf('content') !== -1 ||
+              n.getAttribute('data-automation-id') ||
+              tag === 'SECTION' ||
+              tag === 'MAIN' ||
+              tag === 'DIV'
+            ) {
+              n.style.setProperty('width', '100%', 'important');
+              n.style.setProperty('max-width', '100%', 'important');
+              n.style.setProperty('padding-left', '0', 'important');
+              n.style.setProperty('padding-right', '0', 'important');
+              n.style.setProperty('padding-top', '0', 'important');
+              n.style.setProperty('padding-bottom', '0', 'important');
+              n.style.setProperty('margin-left', '0', 'important');
+              n.style.setProperty('margin-right', '0', 'important');
+              n.style.setProperty('overflow', 'visible', 'important');
+              n.style.setProperty('overflow-x', 'visible', 'important');
+              n.style.setProperty('transform', 'none', 'important');
+              n.style.setProperty('contain', 'none', 'important');
+            }
+          }
+        }
+      };
+
+      applyFullBleed();
+      if (!window.__DHL_SPFX_RESIZE_BOUND__) {
+        window.__DHL_SPFX_RESIZE_BOUND__ = true;
+        window.addEventListener('resize', applyFullBleed);
       }
     };
 
     ConferenciaStageWebPart.prototype._injectGlobalBreakoutStyles = function () {
       var styleId = 'elb-global-css';
-      if (!document.getElementById(styleId)) {
-        var style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = [
-          '#spLeftNav, [data-automation-id="spLeftNav"], #sideNavBox, nav[role="navigation"] {',
+      var isEditMode = window.location.search.indexOf('Mode=Edit') !== -1 || window.location.href.indexOf('Mode=Edit') !== -1;
+      var existing = document.getElementById(styleId);
+      if (existing) existing.remove();
+
+      var style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = [
+        '/* Oculta barras laterais, AppBar e cabeçalhos do SharePoint para Tela Cheia Real (Padrão ELBSystemV4) */',
+        '#spLeftNav, [data-automation-id="spLeftNav"], #sideNavBox,',
+        '#sp-appBar, .sp-appBar, [data-automation-id="sp-appBar"],',
+        '#spSiteHeader, [data-automationid="SiteHeader"], [class*="siteHeader_"],',
+        '[data-automation-id="pageHeader"], [class*="pageHeader_"],',
+        '#CommentsWrapper, [id*="CommentsWrapper"] {',
+        '  display: none !important;',
+        '}',
+        isEditMode ? '' : [
+          '#spCommandBar, [class*="commandBarWrapper_"], #SuiteNavWrapper, #O365_NavHeader {',
           '  display: none !important;',
           '}',
-          '[data-automation-id="CanvasZone"],',
-          '[data-automation-id="CanvasComponent"],',
-          '[data-automation-id="CanvasControl"],',
-          '[data-automation-id="CanvasSection"],',
-          '.CanvasZoneContainer,',
-          '.CanvasZone,',
-          '.CanvasSection,',
-          '.CanvasSection-col,',
-          '.CanvasComponent,',
-          '.SPCanvas,',
-          '.controlZone,',
-          '.CanvasColumn,',
-          '[class*="CanvasZone"],',
-          '[class*="CanvasSection"],',
-          '[class*="CanvasColumn"],',
-          '[class*="controlZone"],',
-          '[class*="CanvasComponent"],',
-          '[class*="mainContent_"],',
-          '[class*="pageContainer_"],',
-          '[class*="contentArea_"],',
-          '[class*="canvasPerTabWrapper_"],',
-          '#spPageCanvasContent,',
-          '.spPageCanvasContent {',
-          '  width: 100% !important;',
-          '  max-width: 100% !important;',
-          '  padding-left: 0 !important;',
-          '  padding-right: 0 !important;',
-          '  padding-top: 0 !important;',
-          '  padding-bottom: 0 !important;',
-          '  margin-left: 0 !important;',
-          '  margin-right: 0 !important;',
-          '  overflow: visible !important;',
-          '  overflow-x: visible !important;',
+          'html, body {',
+          '  overflow: hidden !important;',
           '}',
-          '[data-webpart-id] {',
-          '  width: 100% !important;',
-          '  max-width: 100% !important;',
+          '.elb-container.dhl-spfx-fullscreen {',
+          '  position: fixed !important;',
+          '  top: 0 !important;',
+          '  left: 0 !important;',
+          '  right: 0 !important;',
+          '  bottom: 0 !important;',
+          '  width: 100vw !important;',
+          '  height: 100vh !important;',
+          '  z-index: 99999 !important;',
+          '  overflow-y: auto !important;',
+          '  overflow-x: hidden !important;',
+          '  background-color: #F8FAFC !important;',
+          '  display: flex !important;',
+          '  flex-direction: column !important;',
           '}'
-        ].join('\\n');
-        document.head.appendChild(style);
-      }
+        ].join('\\n'),
+        '[data-automation-id="CanvasZone"],',
+        '[data-automation-id="CanvasZone-SectionContainer"],',
+        '[data-automation-id="CanvasComponent"],',
+        '[data-automation-id="CanvasControl"],',
+        '[data-automation-id="CanvasSection"],',
+        '.CanvasZoneContainer,',
+        '.CanvasZone,',
+        '.CanvasSection,',
+        '.CanvasSection-col,',
+        '.CanvasComponent,',
+        '.SPCanvas,',
+        '.controlZone,',
+        '.CanvasColumn,',
+        '[class*="CanvasZone"],',
+        '[class*="CanvasSection"],',
+        '[class*="CanvasColumn"],',
+        '[class*="controlZone"],',
+        '[class*="CanvasComponent"],',
+        '[class*="mainContent_"],',
+        '[class*="pageContainer_"],',
+        '[class*="contentArea_"],',
+        '[class*="canvasPerTabWrapper_"],',
+        '#spPageCanvasContent,',
+        '.spPageCanvasContent,',
+        '#workbenchPageContent {',
+        '  width: 100% !important;',
+        '  max-width: 100% !important;',
+        '  padding-left: 0 !important;',
+        '  padding-right: 0 !important;',
+        '  padding-top: 0 !important;',
+        '  padding-bottom: 0 !important;',
+        '  margin-left: 0 !important;',
+        '  margin-right: 0 !important;',
+        '  overflow: visible !important;',
+        '  overflow-x: visible !important;',
+        '}',
+        '[data-webpart-id] {',
+        '  width: 100% !important;',
+        '  max-width: 100% !important;',
+        '}',
+        '.elb-container .modal-backdrop {',
+        '  z-index: 100005 !important;',
+        '}',
+        '.elb-container .modal-clean-box.modal-lg {',
+        '  max-height: 90vh !important;',
+        '  overflow-y: auto !important;',
+        '}'
+      ].join('\\n');
+      document.head.appendChild(style);
     };
 
     ConferenciaStageWebPart.prototype.render = function () {
+      window.spContext = this.context;
       this._removeSharePointPadding();
       this._injectGlobalBreakoutStyles();
 
@@ -346,7 +396,7 @@ define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@mi
 
       // 2. Injeta a interface visual HTML da aplicação diretamente no DOM do SharePoint (SEM IFRAME)
       this.domElement.innerHTML = [
-        '<div class="elb-container" style="width: 100%; min-height: 90vh; margin: 0; padding: 0;">',
+        '<div class="elb-container dhl-spfx-fullscreen" style="width: 100%; min-height: 100vh; margin: 0; padding: 0;">',
         ${JSON.stringify(bodyHtmlWithoutScripts)},
         '</div>'
       ].join('');
@@ -355,14 +405,22 @@ define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@mi
       if (!window.__DHL_STAGE_APP_INITIALIZED__) {
         window.__DHL_STAGE_APP_INITIALIZED__ = true;
         try {
-          ${xlsxJs}
+          (function (define, exports, module) {
+            ${xlsxJs}
+            if (typeof XLSX !== 'undefined' && (!window.XLSX || typeof window.XLSX.read !== 'function')) window.XLSX = XLSX;
+          }).call(window, undefined, undefined, undefined);
         } catch(e) { console.warn('[SPFx Native] XLSX:', e); }
         try {
-          ${mqttJs}
+          (function (define, exports, module) {
+            ${mqttJs}
+          }).call(window, undefined, undefined, undefined);
         } catch(e) { console.warn('[SPFx Native] MQTT:', e); }
         try {
           ${stageDataJs}
         } catch(e) { console.warn('[SPFx Native] StageData:', e); }
+        try {
+          ${databaseStorageJs}
+        } catch(e) { console.warn('[SPFx Native] DatabaseStorage:', e); }
         try {
           ${consolidationJs}
         } catch(e) { console.warn('[SPFx Native] Consolidation:', e); }

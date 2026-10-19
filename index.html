@@ -11,7 +11,7 @@
 
   <!-- Navbar Clean DHL Supply Chain -->
   <nav class="top-nav">
-    <div class="brand-group">
+    <div id="brandHomeLink" class="brand-group" onclick="irParaConferencia()" style="cursor: pointer;" title="Ir para Conferência de Stage">
       <img src="dhl_logo.svg" alt="DHL" class="dhl-logo" onerror="this.onerror=null; this.src='dhl_logo.png';">
       <div class="nav-divider"></div>
       <div class="nav-titles">
@@ -20,32 +20,35 @@
       </div>
     </div>
     <div class="nav-actions">
+      <button id="btnNavConferencia" class="btn-icon-nav" title="Tela de Conferência de Stage (Scanner / Embarque)" onclick="irParaConferencia()">
+        Conferência
+      </button>
       <button id="btnToggleDashboard" class="btn-icon-nav btn-nav-dash" title="Mapa Visual de Stages e Gestão de Pátio" onclick="toggleDashboard()">
         Mapa de Stages
       </button>
-      <button id="btnOperacao3D" class="btn-icon-nav" style="background: linear-gradient(135deg, #1E40AF, #3B82F6); color: #FFFFFF; font-weight: 800; border: none; box-shadow: 0 2px 6px rgba(59,130,246,0.35);" title="Visualização e Gestão de Pátio em 3D" onclick="abrirOperacao3D()">
-        <span>🧊</span> Operação 3D
+      <button id="btnOperacao3D" class="btn-icon-nav" title="Visualização de Pátio em 3D Frontal" onclick="abrirOperacao3D()">
+        Operação 3D
       </button>
       <button id="btnToggleConsolidacao" class="btn-icon-nav btn-nav-consolidacao" title="Consolidação de Paletes por SKU+Lote" onclick="toggleConsolidacao()">
-        🔗 Consolidação
+        Consolidação
       </button>
       <button id="btnUploadModal" class="btn-icon-nav" title="Importar / Atualizar Planilha Excel (.xlsx)" onclick="openUploadModal()">
-        <span>📥</span> Atualizar Base
+        Atualizar Base
       </button>
-      <button id="btnPowerBiModal" class="btn-icon-nav" style="background: var(--dhl-yellow); color: var(--dhl-red); font-weight: 800; border: 1.5px solid var(--dhl-red);" title="Sincronização Direta via API Live do Power BI" onclick="openPowerBiModal()">
-        <span>⚡</span> Power BI Live
+      <button id="btnPowerBiModal" class="btn-icon-nav" title="Sincronização Direta via API Live do Power BI" onclick="openPowerBiModal()">
+        Power BI
       </button>
       <button id="btnVerHistorico" class="btn-icon-nav" title="Histórico da Ferramenta" onclick="openHistoryModal('conf')">
-        <span>📜</span> Histórico (<span id="navHistCount">0</span>)
+        Histórico (<span id="navHistCount">0</span>)
       </button>
       <button id="btnSoundToggle" class="btn-icon-nav" title="Alternar Som">
-        <span id="soundIcon">🔊</span> Som
+        <span id="soundIcon">🔊</span>
       </button>
-      <div id="navBaseCount" class="nav-status-chip" onclick="document.getElementById('modalBase').style.display='flex'" style="cursor: pointer;" title="Clique para ver detalhes da base">📊 Base: Carregando...</div>
+      <div id="navBaseCount" class="nav-status-chip" onclick="document.getElementById('modalBase').style.display='flex'" style="cursor: pointer;" title="Clique para ver detalhes da base">Base: ...</div>
       <div id="navSyncStatus" class="nav-sync-chip" onclick="openSyncModal()" title="Sincronização em Tempo Real (On-Time)">
         <span id="syncStatusDot" class="sync-status-dot online"></span>
         <span id="syncStatusText">On-Time</span>
-        <span id="syncPeersCount" class="sync-peers-badge" title="Dispositivos conectados em tempo real">1 online</span>
+        <span id="syncPeersCount" class="sync-peers-badge" style="display:none;" title="Dispositivos conectados em tempo real">1</span>
       </div>
     </div>
   </nav>
@@ -404,17 +407,26 @@
       <div class="dash-title-row">
         <div>
           <h1 class="dash-main-title">Mapa de Stages e Pátio de Expedição</h1>
-          <p class="dash-main-sub">Gestão visual contínua de alocação de cargas, status e vagas físicas</p>
+          <p class="dash-main-sub">Gestão visual de alocação de cargas, status e vagas físicas</p>
         </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 18px;" onclick="closeDashboard()">
-            Voltar para Conferência
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <!-- Alternador de Visualização -->
+          <div class="dash-view-toggle">
+            <button id="btnModeLayout" class="btn-dash-mode active" onclick="StageMap.showLayout('2d')">Planta 2D</button>
+            <button id="btnMode3D" class="btn-dash-mode" onclick="StageMap.showLayout('3d')">Visão 3D</button>
+            <button id="btnModeCards" class="btn-dash-mode" onclick="setDashViewMode('cards')">Cartões</button>
+          </div>
+          <div class="dash-search-wrap">
+            <input type="text" id="dashSearchInput" class="dash-search-input" placeholder="Buscar Stage ou Embarque..." oninput="handleDashSearch(this.value)">
+          </div>
+          <button class="btn-secondary-clean" style="margin: 0; padding: 7px 14px;" onclick="closeDashboard()">
+            ← Voltar
           </button>
         </div>
       </div>
 
       <!-- KPIs Globais do Pátio -->
-      <div class="dash-kpi-bar">
+      <div class="dash-kpi-bar" id="dashKpiBar">
         <div class="dash-kpi-item">
           <span class="dash-kpi-label">Stages no Pátio</span>
           <span id="dashKpiTotal" class="dash-kpi-val">67</span>
@@ -441,8 +453,8 @@
         </div>
       </div>
 
-      <!-- Barra de Filtros, Modos e Busca Rápida -->
-      <div class="dash-toolbar">
+      <!-- Barra de Filtros -->
+      <div class="dash-toolbar" id="dashFilterToolbar">
         <div class="dash-filters">
           <button class="dash-filter-btn active" data-filter="all" onclick="filterDashboard('all')">Todos</button>
           <button class="dash-filter-btn" data-filter="conferido" onclick="filterDashboard('conferido')">Conferidos</button>
@@ -451,28 +463,6 @@
           <button class="dash-filter-btn" data-filter="livre" onclick="filterDashboard('livre')">Livres</button>
           <button class="dash-filter-btn" data-filter="divergencia" onclick="filterDashboard('divergencia')">Com Divergência</button>
         </div>
-        
-        <!-- Alternador de Visualização -->
-        <div class="dash-view-toggle">
-          <button id="btnModeLayout" class="btn-dash-mode" onclick="StageMap.showLayout()">Layout 2D/3D</button>
-          <button id="btnModeLanes" class="btn-dash-mode active" onclick="setDashViewMode('lanes')">Desenho do Stage (Pátio)</button>
-          <button id="btnModeCards" class="btn-dash-mode" onclick="setDashViewMode('cards')">Cartões Resumo</button>
-        </div>
-
-        <div class="dash-search-wrap">
-          <input type="text" id="dashSearchInput" class="dash-search-input" placeholder="Buscar Stage ou Embarque..." oninput="handleDashSearch(this.value)">
-        </div>
-      </div>
-
-      <!-- Legenda com Mapa de Calor do Pátio (Identidade P&G e Segurança) -->
-      <div class="yard-legend-bar">
-        <span class="legend-item"><span class="swatch-solid swatch-solid-green"></span> <b>Verde:</b> Conferido (100% Validado ✔)</span>
-        <span class="legend-item"><span class="swatch-solid swatch-solid-gray-light"></span> <b>Cinza Claro:</b> Aguardando Conferência</span>
-        <span class="legend-item"><span class="swatch-solid swatch-solid-orange"></span> <b>Laranja:</b> Parcial / Ramificação</span>
-        <span class="legend-item"><span class="swatch-solid swatch-solid-red"></span> <b>Vermelho:</b> Bloqueado / Divergência (✖)</span>
-        <span class="legend-item"><span class="swatch-solid swatch-solid-blue"></span> <b>Azul:</b> Vaga Ativa (Bipando)</span>
-        <span class="legend-item"><span class="swatch-solid swatch-solid-purple"></span> <b>Contorno colorido:</b> Embarque (agrupa seus stages)</span>
-        <span class="legend-item"><span class="swatch-solid swatch-solid-free"></span> <b>Branco Tracejado:</b> Stage Livre (Vazio)</span>
       </div>
     </header>
 
@@ -834,11 +824,11 @@
       <!-- Drag & Drop Zone -->
       <div id="dropZone" class="upload-dropzone">
         <div class="dropzone-icon">📥</div>
-        <div class="dropzone-title">Arraste e solte o arquivo Excel aqui</div>
-        <div class="dropzone-subtitle">Suporta <b>adhoc80.xlsx</b>, <b>adhc8-*.xlsx</b> ou <b>GUIA DE CONFERÊNCIA.xlsx</b></div>
+        <div class="dropzone-title">Arraste e solte o arquivo Excel (.xlsx) ou CSV aqui</div>
+        <div class="dropzone-subtitle">Suporta <b>data - 2026-*.xlsx</b>, <b>data (1).xlsx</b>, <b>ADHOC_80.xlsx</b> ou <b>ADHOC_80.csv</b><br><span style="font-size:0.74rem; color:#B45309;">💡 No Power BI, exporte com <b>"Dados com layout atual"</b> ou <b>".xlsx (Excel 150.000 linhas)"</b> (não use "Tabela com conexão dinâmica")</span></div>
         
         <label for="excelFileInput" class="btn-file-select">
-          Selecionar Arquivo do Computador
+          Selecionar Arquivo (.xlsx / .csv)
         </label>
         <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;">
       </div>
@@ -846,18 +836,18 @@
       <!-- Feedback de Processamento do Upload -->
       <div id="uploadFeedback" style="display: none; margin-top: 16px;"></div>
 
-      <!-- Opção Direta via API: Extrair CSV do SharePoint (Central de Dados OMS) -->
+      <!-- Opção Direta via API: Extrair XLSX/CSV do SharePoint / Downloads -->
       <div style="background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 8px; padding: 14px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
         <div>
           <div style="font-size: 0.88rem; font-weight: 800; color: #92400E; display: flex; align-items: center; gap: 6px;">
-            <span>📁</span> Extrair CSV do SharePoint (Central de Dados OMS)
+            <span>📁</span> Extrair Último <code>data - *.xlsx</code> / <code>ADHOC_80</code> (Downloads ou SharePoint)
           </div>
           <div style="font-size: 0.76rem; color: #B45309; margin-top: 2px;">
-            Lê o <code>ADHOC_80.csv</code> sincronizado e injeta na ferramenta em &lt; 1 segundo
+            Busca automaticamente o arquivo <code>data - *.xlsx</code> completo mais recente na pasta Downloads ou no SharePoint
           </div>
         </div>
         <button type="button" class="btn-clean-primary" id="btnExtrairSharePointApi" style="margin-top: 0; width: auto; padding: 9px 18px; background: #D97706; font-weight: 700;" onclick="extrairCsvSharePoint()">
-          ⚡ Extrair CSV via API
+          ⚡ Extrair Base Real
         </button>
       </div>
 
@@ -885,16 +875,7 @@
         </button>
       </div>
 
-      <!-- Opções Rápidas de Atualização Direta via SQL -->
-      <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 12px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-        <div>
-          <div style="font-size: 0.85rem; font-weight: 800; color: #166534;">🗄️ Conexão Direta ao Banco ITATIAIA (View WMS)</div>
-          <div style="font-size: 0.75rem; color: #15803D;">Consulta a view <code>[itatiaia].[SHIPPING_PCKWRK_VIEW_SIMPLIFICADA]</code> via SQL</div>
-        </div>
-        <button type="button" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 16px; background: #059669;" onclick="atualizarViaSqlServer()">
-          Puxar do SQL Server
-        </button>
-      </div>
+
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; border-top: 1px solid var(--border-light); padding-top: 14px;">
         <div style="font-size: 0.8rem; color: var(--text-muted);">
@@ -971,9 +952,14 @@
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; border-top: 1px solid var(--border-light); padding-top: 12px;">
-          <button id="btnExportarTodoHistorico" class="btn-secondary-clean" style="margin-left: 0;">
-            📥 Exportar Conferências (CSV)
-          </button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="btnExportarTodoHistorico" class="btn-secondary-clean" style="margin-left: 0;">
+              📥 Exportar Conferências (CSV)
+            </button>
+            <button id="btnExportarBancoCompletoExcel" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 7px 14px; background: #047857; font-size: 0.8rem; font-weight: 700;" onclick="window.DHL_DB && window.DHL_DB.exportarBancoExcel()" title="Exporta todas as tabelas do IndexedDB (Conferências, Bipagens com Vaga, Ocorrências e Base) para uma planilha Excel">
+              📊 Baixar Banco Completo (.xlsx)
+            </button>
+          </div>
           <button id="btnFecharModalHist" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 20px;">
             Fechar
           </button>
@@ -1145,15 +1131,13 @@
 
   <!-- Bibliotecas: MQTT para sincronização em tempo real na nuvem/GitHub e SheetJS para Excel -->
   <script src="mqtt.min.js"></script>
-  <script>if (typeof mqtt === 'undefined') { document.write('<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"><\/script>'); }</script>
   <script src="xlsx.full.min.js"></script>
-  <script>
-    document.write('<script src="stage_data.js?t=' + Date.now() + '"><\/script>');
-  </script>
-  <script src="consolidation_planner.js?v=20261016b"></script>
-  <script src="app.js?v=20261016b"></script>
-  <script src="stage_map.js?v=20261016b"></script>
-  <script src="powerbi_sync.js?v=20261016b"></script>
-  <script src="sync.js?v=20261016b"></script>
+  <script src="stage_data.js"></script>
+  <script src="database_storage.js"></script>
+  <script src="consolidation_planner.js"></script>
+  <script src="app.js"></script>
+  <script src="stage_map.js"></script>
+  <script src="powerbi_sync.js"></script>
+  <script src="sync.js"></script>
 </body>
 </html>

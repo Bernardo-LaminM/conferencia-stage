@@ -28,8 +28,16 @@
     var occ = {}, orig = {};
     scope.forEach(function (s) { (s.slots || []).forEach(function (x) {
       if (x.status && x.status !== 'livre') {
-        occ[K(s.id, x.pos)] = { sid: s.id, pos: x.pos, status: x.status, lpn: x.lpn, sku: x.sku, lote: x.lote, qtd: +x.qtd || 0, k0: K(s.id, x.pos) };
-        orig[K(s.id, x.pos)] = x;
+        if (Array.isArray(x.paletes) && x.paletes.length > 1) {
+          x.paletes.forEach(function (p, pi) {
+            var k = K(s.id, x.pos) + '_' + pi;
+            occ[k] = { sid: s.id, pos: x.pos, status: p.status || x.status, lpn: p.lpn || x.lpn, sku: p.sku || x.sku, lote: p.lote || x.lote, qtd: +p.qtd || Math.round((+x.qtd || 0) / x.paletes.length), k0: k };
+          });
+          orig[K(s.id, x.pos)] = x;
+        } else {
+          occ[K(s.id, x.pos)] = { sid: s.id, pos: x.pos, status: x.status, lpn: x.lpn, sku: x.sku, lote: x.lote, qtd: +x.qtd || 0, k0: K(s.id, x.pos) };
+          orig[K(s.id, x.pos)] = x;
+        }
       }
     }); });
     var before = Object.keys(occ).length;

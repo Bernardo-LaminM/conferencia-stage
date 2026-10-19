@@ -97,149 +97,38 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 2. Extrair CSV do SharePoint & Injetar na Ferramenta
+  // 2. Extrair XLSX / CSV do SharePoint & Injetar na Ferramenta
   if (pathname === '/api/extrair-csv' || pathname === '/api/sync' || pathname === '/api/sync-sharepoint') {
     const tStart = Date.now();
-    let csvFile = parsedUrl.searchParams.get('caminho') || SHAREPOINT_CSV;
-
-    // Fallback: se não estiver no caminho absoluto, tenta na pasta atual
-    if (!fs.existsSync(csvFile)) {
-      const localCsv = path.join(ROOT_DIR, 'ADHOC_80.csv');
-      if (fs.existsSync(localCsv)) csvFile = localCsv;
-    }
-
-    if (!fs.existsSync(csvFile)) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({
-        ok: false,
-        message: `Arquivo CSV não encontrado em: ${csvFile}. Verifique se o SharePoint está sincronizado.`
-      }));
-      return;
-    }
+    const customPath = parsedUrl.searchParams.get('caminho') || undefined;
 
     try {
-      let rawContent = fs.readFileSync(csvFile, 'utf8');
-      if (rawContent.charCodeAt(0) === 0xFEFF) rawContent = rawContent.slice(1);
-
-      const lines = rawContent.split(/\r?\n/).filter(l => l.trim().length > 0);
-      if (lines.length < 2) {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ ok: false, message: 'O arquivo CSV está vazio ou sem linhas de dados.' }));
+      const spMod = require('./atualizar_sharepoint.js');
+      const resSync = spMod.atualizar(customPath);
+      if (!resSync || !resSync.ok) {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          ok: false,
+          message: 'Arquivo .xlsx ou .csv não encontrado no SharePoint/Downloads.'
+        }));
         return;
       }
 
-      // Identifica os cabeçalhos normalizados
-      const headers = lines[0].split(',').map(h => h.replace(/[\[\]'"]/g, '').trim().toLowerCase());
-      const dict = {};
-      const allStages = new Set();
-      let totalPecas = 0;
-      let totalPal = 0;
-
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',');
-        const row = {};
-        for (let j = 0; j < headers.length; j++) {
-          row[headers[j]] = parts[j] ? parts[j].trim() : '';
-        }
-
-        const embId = row.car_move_id;
-        const palId = row.pallet_id;
-        if (!embId || !palId) continue;
-
-        const ordNum = row.ordnum;
-        const stage = row.dstloc;
-        const sku = row.prtnum;
-        const qtd = parseInt(row.qtd_caixas, 10) || 0;
-
-        if (stage) allStages.add(stage);
-
-        if (!dict[embId]) {
-          dict[embId] = {
-            embarque: embId,
-            total_paletes: 0,
-            total_pecas: 0,
-            stages: new Set(),
-            pal: new Map()
-          };
-        }
-
-        const e = dict[embId];
-        if (stage) e.stages.add(stage);
-
-        if (!e.pal.has(palId)) {
-          e.pal.set(palId, {
-            palete: palId,
-            stage: stage,
-            order_num: ordNum,
-            itens: [],
-            qtd_total: 0,
-            sku_resumo: sku || 'Material',
-            desc_resumo: sku ? 'SKU ' + sku : 'Material'
-          });
-        }
-
-        const p = e.pal.get(palId);
-        p.itens.push({
-          sku: sku,
-          desc_produto: sku ? 'SKU ' + sku : 'Material',
-          qtd: qtd,
-          order_num: ordNum
-        });
-        p.qtd_total += qtd;
-        e.total_pecas += qtd;
-        totalPecas += qtd;
-        totalPal++;
-      }
-
-      const outEmbarques = {};
-      Object.values(dict).forEach(e => {
-        const paletes = Array.from(e.pal.values());
-        outEmbarques[e.embarque] = {
-          embarque: e.embarque,
-          total_paletes: paletes.length,
-          total_pecas: e.total_pecas,
-          stages: Array.from(e.stages),
-          paletes: paletes
-        };
-        const alias = e.embarque.replace(/^0+/, '');
-        if (alias && alias !== e.embarque) {
-          outEmbarques[alias] = outEmbarques[e.embarque];
-        }
-      });
-
-      const uniqueEmbs = Object.keys(dict).length;
-      const finalDb = {
-        origem: 'API_SharePoint_CSV',
-        atualizado_em: new Date().toISOString(),
-        total_embarques: uniqueEmbs,
-        total_paletes: totalPal,
-        total_pecas: totalPecas,
-        total_stages: allStages.size,
-        embarques: outEmbarques
-      };
-
-      // Grava em stage_data.json e stage_data.js sem BOM
-      const jsonFile = path.join(ROOT_DIR, 'stage_data.json');
-      const jsFile = path.join(ROOT_DIR, 'stage_data.js');
-
-      fs.writeFileSync(jsonFile, JSON.stringify(finalDb, null, 2), 'utf8');
-      fs.writeFileSync(jsFile, 'window.EMBEDDED_STAGE_DATA = ' + JSON.stringify(finalDb, null, 2) + ';\n', 'utf8');
-
       const elapsedMs = Date.now() - tStart;
+      const finalDb = resSync.database;
 
       const responsePayload = {
         ok: true,
-        origem: 'SharePoint CSV (Central de Dados OMS)',
-        arquivo: csvFile,
+        origem: `SharePoint / Power BI (${path.basename(resSync.arquivo)})`,
+        arquivo: resSync.arquivo,
         tempo_processamento_ms: elapsedMs,
-        total_linhas_csv: lines.length - 1,
-        total_embarques: uniqueEmbs,
-        total_paletes: totalPal,
-        total_pecas: totalPecas,
-        total_stages: allStages.size,
-        stages: Array.from(allStages).sort(),
+        total_embarques: resSync.embarques,
+        total_paletes: resSync.paletes,
+        total_pecas: resSync.pecas,
+        total_stages: resSync.stages.length,
+        stages: resSync.stages,
         atualizado_em: finalDb.atualizado_em,
-        message: `Sucesso! ${uniqueEmbs} embarques e ${totalPal} paletes extraídos do CSV e injetados na ferramenta.`
+        message: `Sucesso! ${resSync.embarques} embarques e ${resSync.paletes} paletes extraídos de ${path.basename(resSync.arquivo)} e injetados na ferramenta.`
       };
 
       if (parsedUrl.searchParams.get('include_data') === '1') {

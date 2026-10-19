@@ -20,9 +20,9 @@
 
   const DEFAULT_CONFIG = {
     workspaceId: 'f0810a12-fd37-4f7a-ba46-4a447e425649',
-    datasetId: '5939ef54-f0ca-4d0b-8821-f8cfc989bf80',
-    tableName: 'itatiaia SHIPPING_PCKWRK_VIEW_SIMPLIFICADA',
-    daxQuery: `EVALUATE\nSELECTCOLUMNS(\n  'itatiaia SHIPPING_PCKWRK_VIEW_SIMPLIFICADA',\n  "car_move_id", [car_move_id],\n  "ORDNUM", [ORDNUM],\n  "PALLET_ID", [PALLET_ID],\n  "DSTLOC", [DSTLOC],\n  "PRTNUM", [PRTNUM],\n  "QTD_CAIXAS", [QTD_CAIXAS]\n)`,
+    datasetId: 'fefdda8c-aa69-48a6-b2bf-75daba388cd4',
+    tableName: 'itatiaia AD80',
+    daxQuery: `DEFINE\n  VAR __DS0Core = SUMMARIZECOLUMNS(\n    'itatiaia AD80'[car_move_id],\n    'itatiaia AD80'[ORDNUM],\n    'itatiaia AD80'[PALLET_ID],\n    'itatiaia AD80'[DSTLOC],\n    'itatiaia AD80'[Atividade],\n    'itatiaia AD80'[PRTNUM],\n    'itatiaia AD80'[LOT],\n    "QTD_CAIXAS", CALCULATE(SUM('itatiaia AD80'[QTD_CAIXAS])),\n    "SPS", CALCULATE(SUM('itatiaia AD80'[SPS]))\n  )\nEVALUATE TOPN(500000, __DS0Core, 'itatiaia AD80'[car_move_id], 1, 'itatiaia AD80'[ORDNUM], 1, 'itatiaia AD80'[PALLET_ID], 1)`,
     savedToken: '',
     intervalSec: 120
   };
@@ -32,7 +32,15 @@
   function getConfig() {
     try {
       const saved = localStorage.getItem(POWERBI_CONFIG_KEY);
-      if (saved) return Object.assign({}, DEFAULT_CONFIG, JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.datasetId === '5939ef54-f0ca-4d0b-8821-f8cfc989bf80') {
+          parsed.datasetId = DEFAULT_CONFIG.datasetId;
+          parsed.tableName = DEFAULT_CONFIG.tableName;
+          parsed.daxQuery = DEFAULT_CONFIG.daxQuery;
+        }
+        return Object.assign({}, DEFAULT_CONFIG, parsed);
+      }
     } catch (e) {}
     return Object.assign({}, DEFAULT_CONFIG);
   }
@@ -74,7 +82,14 @@
   /* ---------------- Linhas DAX -> embarques ---------------- */
   function construirEmbarques(rawRows) {
     if (!Array.isArray(rawRows) || rawRows.length === 0) throw new Error('Nenhum registro encontrado no retorno do Power BI.');
-    const cleanRow = (r) => { const o = {}; Object.keys(r).forEach(k => { o[k.replace(/[\[\]']/g, '').trim().toLowerCase()] = r[k]; }); return o; };
+    const cleanRow = (r) => {
+      const o = {};
+      Object.keys(r).forEach(k => {
+        const shortKey = k.replace(/^.*\[/, '').replace(/[\[\]']/g, '').trim().toLowerCase();
+        o[shortKey] = r[k];
+      });
+      return o;
+    };
     const dict = {};
     let linhas = 0;
     rawRows.forEach(row => {
@@ -85,18 +100,26 @@
       const ordId = String(it.ordnum || it.order_num || '').trim();
       const stg = String(it.dstloc || it.stage || '').trim();
       const sku = String(it.prtnum || it.sku || '').trim();
-      const lote = String(it.lotnum || it.lote || '').trim();
-      const qtd = parseInt(it.qtd_caixas || it.caixas || it.pckqty || it.qtd || 0, 10) || 0;
+      const lote = String(it.lot || it.lotnum || it.lote || '').trim();
+      const qtd = Math.round(parseFloat(it.qtd_caixas || it.sumqtd_caixas || it.caixas || it.pckqty || it.qtd || 0)) || 0;
       const e = dict[embId] || (dict[embId] = { embarque: embId, total_pecas: 0, stages: new Set(), pal: new Map() });
       if (stg) e.stages.add(stg);
-      if (!e.pal.has(palId)) e.pal.set(palId, { palete: palId, stage: stg, order_num: ordId, itens: [], qtd_total: 0, sku_resumo: sku || 'Material', desc_resumo: sku ? `SKU ${sku}` : 'Material' });
+      if (!e.pal.has(palId)) e.pal.set(palId, { palete: palId, stage: stg, order_num: ordId, lote: lote, itens: [], _itemMap: new Map(), qtd_total: 0, sku_resumo: sku || 'Material', desc_resumo: sku ? `SKU ${sku}` : 'Material' });
       const p = e.pal.get(palId);
-      p.itens.push({ sku: sku || 'Material', lote: lote, qtd: qtd, order_num: ordId });
+      const itemKey = `${sku}|${lote}`;
+      if (p._itemMap.has(itemKey)) {
+        p._itemMap.get(itemKey).qtd += qtd;
+      } else {
+        const itemObj = { sku: sku || 'Material', lote: lote, qtd: qtd, order_num: ordId };
+        p._itemMap.set(itemKey, itemObj);
+        p.itens.push(itemObj);
+      }
       p.qtd_total += qtd; e.total_pecas += qtd; linhas++;
     });
     const out = {};
     Object.values(dict).forEach(e => {
       const paletes = Array.from(e.pal.values());
+      paletes.forEach(p => { delete p._itemMap; });
       out[e.embarque] = { embarque: e.embarque, total_paletes: paletes.length, total_pecas: e.total_pecas, stages: Array.from(e.stages), paletes: paletes };
     });
     if (!Object.keys(out).length) throw new Error('Não foi possível identificar paletes ou embarques válidos nos dados recebidos.');
@@ -205,12 +228,20 @@
 
   async function lerApiPowerBi(token) {
     const cfg = getConfig();
-    const url = `https://api.powerbi.com/v1.0/myorg/groups/${cfg.workspaceId}/datasets/${cfg.datasetId}/executeQueries`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ queries: [{ query: cfg.daxQuery || `EVALUATE '${cfg.tableName}'` }], serializerSettings: { includeNulls: true } })
-    });
+    const bodyPayload = JSON.stringify({ queries: [{ query: cfg.daxQuery || `EVALUATE '${cfg.tableName}'` }], serializerSettings: { includeNulls: true } });
+    const urls = [
+      `https://api.powerbi.com/v1.0/myorg/datasets/${cfg.datasetId}/executeQueries`,
+      `https://api.powerbi.com/v1.0/myorg/groups/${cfg.workspaceId}/datasets/${cfg.datasetId}/executeQueries`
+    ];
+    let res = null;
+    for (const url of urls) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: bodyPayload
+      });
+      if (res.ok || res.status === 401 || res.status === 403) break;
+    }
     if (!res.ok) {
       let msg = '';
       try { const j = await res.json(); msg = (j.error && j.error.message) || JSON.stringify(j); } catch (e) { msg = await res.text().catch(() => ''); }
@@ -222,13 +253,29 @@
     const tables = data && data.results && data.results[0] && data.results[0].tables;
     if (!tables || !tables.length || !Array.isArray(tables[0].rows)) throw new Error('A API do Power BI não retornou linhas.');
     const b = construirEmbarques(tables[0].rows);
-    return { embarques: b.embarques, linhas: b.linhas, source: 'Power BI (API)', ts: new Date().toISOString() };
+    return { embarques: b.embarques, linhas: b.linhas, source: 'Power BI Live (itatiaia AD80)', ts: new Date().toISOString() };
   }
 
-  /* Snapshot publicado pelo GitHub Actions. Só é usado se for mais novo que a base atual. */
+  /* Snapshot publicado ou base embutida no pacote SPFx. */
   async function lerNuvem() {
+    if (!isLocalServer && window.location && /sharepoint\.com/i.test(window.location.hostname)) {
+      const embSp = window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques;
+      if (embSp && Object.keys(embSp).length > 0) {
+        const tsSp = window.EMBEDDED_STAGE_DATA.atualizado_em || new Date().toISOString();
+        if (state.ts && new Date(tsSp) <= new Date(state.ts)) return null;
+        return { embarques: unicos(embSp), source: 'Base SharePoint (SPFx)', ts: tsSp };
+      }
+    }
     const res = await fetch('stage_data.js?nocache=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) throw new Error('stage_data.js indisponível (' + res.status + ')');
+    if (!res.ok) {
+      const embFallback = window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques;
+      if (embFallback && Object.keys(embFallback).length > 0) {
+        const tsFb = window.EMBEDDED_STAGE_DATA.atualizado_em || new Date().toISOString();
+        if (state.ts && new Date(tsFb) <= new Date(state.ts)) return null;
+        return { embarques: unicos(embFallback), source: 'Base Embutida (SPFx)', ts: tsFb };
+      }
+      throw new Error('stage_data.js indisponível (' + res.status + ')');
+    }
     const lm = res.headers.get('Last-Modified');
     const ts = lm ? new Date(lm).toISOString() : null;
     if (ts && state.ts && new Date(ts) <= new Date(state.ts)) return null; // não é mais novo
@@ -249,7 +296,14 @@
         try { return await lerServidorLocal(); } catch (e) { erros.push(e.message); }
       }
       const cfg = getConfig();
-      const ti = tokenInfo(tokenManual || cfg.savedToken);
+      let tok = tokenManual || cfg.savedToken;
+      if (!tok && window.spContext && window.spContext.aadTokenProviderFactory) {
+        try {
+          const tp = await window.spContext.aadTokenProviderFactory.getTokenProvider();
+          tok = await tp.getToken('https://analysis.windows.net/powerbi/api');
+        } catch (e) {}
+      }
+      const ti = tokenInfo(tok);
       if (tokenManual && ti.token) { cfg.savedToken = ti.token; saveConfig(cfg); }
       if (ti.ok) {
         try { return await lerApiPowerBi(ti.token); }
@@ -385,20 +439,20 @@
     if (!btn) return;
     const st = status();
     const s = st.proximaEm, t = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-    let html, bg, fg, bd, tip;
+    let dotColor = '#94A3B8', label = 'Power BI', tip = '';
     if (st.syncing) {
-      html = `<span class="pbi-spin">🔄</span> <b>Power BI</b> <span class="pbi-badge-sub">atualizando…</span>`;
-      bg = '#003DA5'; fg = '#fff'; bd = '#002B7A'; tip = 'Consultando o Power BI';
+      dotColor = '#2563EB';
+      label = 'Power BI…';
+      tip = 'Consultando o Power BI';
     } else if (st.erro && (!st.ts || st.atrasado)) {
-      html = `<span>⚠️</span> <b>Power BI</b> <span class="pbi-badge-sub">${st.ts ? 'dados de ' + hhmm(st.ts) : 'sem dados'} · ⏱ ${t}</span>`;
-      bg = '#FEF2F2'; fg = '#B91C1C'; bd = '#DC2626'; tip = 'Última falha: ' + st.erro;
+      dotColor = '#F59E0B';
+      tip = 'Power BI (' + (st.ts ? 'dados de ' + hhmm(st.ts) : 'base local ativa') + ') · Próxima verificação em ' + t;
     } else {
-      html = `<span>⚡</span> <b>Power BI</b> <span class="pbi-badge-sub">${hhmm(st.ts)} · ⏱ ${t}</span>`;
-      bg = st.atrasado ? '#FFFBEB' : 'var(--dhl-yellow)'; fg = st.atrasado ? '#92400E' : 'var(--dhl-red)'; bd = st.atrasado ? '#F59E0B' : 'var(--dhl-red)';
-      tip = (st.ts ? `Base do Power BI lida às ${hhmm(st.ts)} (${st.source})` : 'Aguardando primeira leitura') + ` · próxima verificação em ${t}`;
+      dotColor = st.ts ? '#10B981' : '#94A3B8';
+      tip = (st.ts ? `Base do Power BI lida às ${hhmm(st.ts)} (${st.source})` : 'Aguardando leitura') + ` · próxima verificação em ${t}`;
     }
-    btn.innerHTML = html; btn.title = tip;
-    btn.style.background = bg; btn.style.color = fg; btn.style.borderColor = bd;
+    btn.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${dotColor};display:inline-block;"></span> <span>${label}</span>`;
+    btn.title = tip;
     const box = document.getElementById('pbiStatusBox');
     if (box && box.offsetParent !== null) renderStatusBox();
   }
@@ -419,7 +473,7 @@
   /* ---------------- Modal ---------------- */
   window.openPowerBiModal = function () {
     let modal = document.getElementById('modalPowerBiSync');
-    if (!modal) { modal = criarModalPowerBi(); document.body.appendChild(modal); }
+    if (!modal) { modal = criarModalPowerBi(); (document.querySelector('.elb-container') || document.body).appendChild(modal); }
     const cfg = getConfig();
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     set('pbiInputWorkspaceId', cfg.workspaceId);
@@ -468,7 +522,7 @@
     } catch (err) {
       feedback.className = 'pbi-feedback-error';
       feedback.innerHTML = `✖ <b>Não foi possível ler o Power BI:</b><br>${String(err.message).replace(/</g, '&lt;')}<br><br>` +
-        `<button type="button" class="btn-clean-primary" style="margin:0;font-size:.78rem;padding:6px 12px;background:#003DA5;" onclick="closePowerBiModal(); if(typeof openUploadModal === 'function') openUploadModal();">📥 Carregar Planilha Excel</button>`;
+        `<button type="button" class="btn-clean-primary" style="margin:0;font-size:.78rem;padding:6px 12px;background:#003DA5;" data-csp-onclick="closePowerBiModal(); if(typeof openUploadModal === 'function') openUploadModal();">📥 Carregar Planilha Excel</button>`;
     } finally {
       btn.disabled = false;
       btn.innerHTML = '⚡ Sincronizar com o Power BI agora';
@@ -541,14 +595,14 @@
               <span style="font-size:.76rem;color:#64748B;">Base de embarques e paletes vinda da view WMS, distribuída a todos os aparelhos On-Time</span>
             </div>
           </div>
-          <button type="button" class="btn-close-x" onclick="closePowerBiModal()">&times;</button>
+          <button type="button" class="btn-close-x" data-csp-onclick="closePowerBiModal()">&times;</button>
         </div>
 
         <div id="pbiFeedbackBox" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:.85rem;line-height:1.45;"></div>
 
         <div id="pbiStatusBox" style="display:grid;gap:4px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:.8rem;color:#1E293B;"></div>
 
-        <button id="btnPbiExecutar" type="button" class="btn-clean-primary" style="margin-top:0;background:#003DA5;padding:13px;font-size:.98rem;font-weight:800;border-radius:8px;width:100%;" onclick="acionarExecucaoPowerBi()">
+        <button id="btnPbiExecutar" type="button" class="btn-clean-primary" style="margin-top:0;background:#003DA5;padding:13px;font-size:.98rem;font-weight:800;border-radius:8px;width:100%;" data-csp-onclick="acionarExecucaoPowerBi()">
           ⚡ Sincronizar com o Power BI agora
         </button>
         <div style="margin-top:8px;font-size:.72rem;color:#64748B;line-height:1.4;">
@@ -570,7 +624,7 @@
             <label style="font-weight:700;color:#475569;">Consulta DAX
               <textarea id="pbiInputDaxQuery" rows="6" class="input-clean" style="margin-top:4px;text-align:left;font-family:monospace;font-size:.72rem;"></textarea>
             </label>
-            <button type="button" class="btn-secondary-clean" style="justify-self:start;margin-left:0;" onclick="salvarConfigPowerBi()">Salvar configuração</button>
+            <button type="button" class="btn-secondary-clean" style="justify-self:start;margin-left:0;" data-csp-onclick="salvarConfigPowerBi()">Salvar configuração</button>
           </div>
         </details>
 
@@ -578,12 +632,12 @@
           <summary style="font-size:.78rem;color:#475569;cursor:pointer;font-weight:700;">📋 Colar resultado da consulta DAX manualmente</summary>
           <div style="margin-top:10px;">
             <textarea id="pbiJsonInput" rows="4" class="input-clean" style="text-align:left;font-family:monospace;font-size:.75rem;padding:8px;" placeholder="Cole o JSON da API ou a tabela copiada do DAX Query View (com cabeçalho)"></textarea>
-            <button type="button" class="btn-secondary-clean" style="margin-top:6px;margin-left:0;font-size:.78rem;" onclick="processarJsonDaxColado()">📥 Processar dados colados</button>
+            <button type="button" class="btn-secondary-clean" style="margin-top:6px;margin-left:0;font-size:.78rem;" data-csp-onclick="processarJsonDaxColado()">📥 Processar dados colados</button>
           </div>
         </details>
 
         <div style="display:flex;justify-content:flex-end;margin-top:16px;border-top:1px solid #E2E8F0;padding-top:12px;">
-          <button type="button" class="btn-secondary-clean" onclick="closePowerBiModal()">Fechar</button>
+          <button type="button" class="btn-secondary-clean" data-csp-onclick="closePowerBiModal()">Fechar</button>
         </div>
       </div>`;
     return div;

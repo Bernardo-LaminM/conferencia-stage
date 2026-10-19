@@ -7,6 +7,7 @@ const styleCssPath = path.join(baseDir, 'style.css');
 const stageMapCssPath = path.join(baseDir, 'stage_map.css');
 const dhlBrandingCssPath = path.join(baseDir, 'dhl_branding.css');
 
+const databaseStorageJsPath = path.join(baseDir, 'database_storage.js');
 const consolidationJsPath = path.join(baseDir, 'consolidation_planner.js');
 const stageMapJsPath = path.join(baseDir, 'stage_map.js');
 const appJsPath = path.join(baseDir, 'app.js');
@@ -18,6 +19,7 @@ const styleCss = fs.readFileSync(styleCssPath, 'utf8');
 const stageMapCss = fs.readFileSync(stageMapCssPath, 'utf8');
 const dhlBrandingCss = fs.existsSync(dhlBrandingCssPath) ? fs.readFileSync(dhlBrandingCssPath, 'utf8') : '';
 
+const databaseStorageJs = fs.existsSync(databaseStorageJsPath) ? fs.readFileSync(databaseStorageJsPath, 'utf8') : '';
 const consolidationJs = fs.existsSync(consolidationJsPath) ? fs.readFileSync(consolidationJsPath, 'utf8') : '';
 const stageMapJs = fs.existsSync(stageMapJsPath) ? fs.readFileSync(stageMapJsPath, 'utf8') : '';
 const appJs = fs.existsSync(appJsPath) ? fs.readFileSync(appJsPath, 'utf8') : '';
@@ -57,14 +59,8 @@ html = html.replace(/<body([^>]*)>/i, function(match, attrs) {
 html = html.replace(/<link rel="stylesheet" href="style.css">/i, `<style>\n${styleCss}\n${dhlBrandingCss}\n</style>`);
 html = html.replace(/<link rel="stylesheet" href="stage_map.css[^"]*">/i, `<style>\n${stageMapCss}\n</style>`);
 
-// Substitui a imagem do logo pelo SVG oficial da DHL + vinheta sutil "Orgulho de ser DHL"
-const brandWithAccent = `
-  ${dhlSvg}
-  <div class="dhl-brand-accent" title="Orgulho de ser DHL">
-    <img src="${orgulhoB64}" alt="Orgulho de ser DHL">
-  </div>
-`;
-html = html.replace(/<img src="dhl_logo.svg"[^>]*>/i, brandWithAccent);
+// Substitui a imagem do logo pelo SVG oficial da DHL (limpo, sem adesivos extras na topbar)
+html = html.replace(/<img src="dhl_logo\.svg"[^>]*>/i, dhlSvg);
 
 // Banner no login de boas-vindas
 if (aviaoB64) {
@@ -143,6 +139,7 @@ if (stageDataJs) {
 }
 
 // Substitui TODOS os scripts da aplicação por scripts inline (usando função callback para evitar corrupção por tokens $)
+html = html.replace(/<script src="database_storage\.js[^"]*"><\/script>/i, () => `<script>\n${databaseStorageJs}\n</script>`);
 html = html.replace(/<script src="consolidation_planner\.js[^"]*"><\/script>/i, () => `<script>\n${consolidationJs}\n</script>`);
 html = html.replace(/<script src="app\.js[^"]*"><\/script>/i, () => `<script>\n${appJs}\n</script>`);
 html = html.replace(/<script src="stage_map\.js[^"]*"><\/script>/i, () => `<script>\n${stageMapJs}\n</script>`);

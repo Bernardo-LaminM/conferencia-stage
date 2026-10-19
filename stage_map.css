@@ -1,13 +1,13 @@
-/* Mapa de Stages — layout 2D/3D com embarques agrupando stages (DHL Supply Chain) */
+/* Mapa de Stages — Planta 2D Corporativa (DHL Supply Chain) */
 
 /* ===== Tokens ===== */
 .sm-root{
-  --cw:44px;--ch:44px;--lab:34px;--plate:28px;
+  --cw:44px;--ch:44px;--lab:6px;--plate:28px;
   --ink:#0f172a;--ink2:#475569;--ink3:#94a3b8;--line:#e2e8f0;--line2:#cfd6df;--card:#fff;--soft:#f8fafc;
   --ok:#1f9d63;--okd:#157347;--wait:#cbd5e1;--waitd:#94a3b8;--bad:#d64545;--badd:#a52a2a;--act:#2563eb;--actd:#1d4ed8;--warn:#d97706;
   --dhl-y:#FFCC00;--dhl-r:#D40511;
   color:var(--ink);font-family:inherit;font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased;
-  background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px 10px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px 10px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
 .sm-root button{font-family:inherit}
 .sm-root :focus-visible{outline:2px solid var(--act);outline-offset:2px}
 
@@ -114,10 +114,9 @@
 .sm-door.on span{color:var(--ink)}
 
 /* placa do stage */
-.sm-plate{position:relative;display:block;width:100%;height:var(--plate);margin:0 0 6px;padding:0;border:0;border-radius:5px;background:#fff;color:var(--ink);font-size:.62rem;font-weight:800;line-height:var(--plate);letter-spacing:-.01em;white-space:nowrap;text-align:center;cursor:pointer;
+.sm-plate{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:var(--plate);margin:0 0 6px;padding:0 2px;border:0;border-radius:5px;background:#fff;color:var(--ink);font-size:.62rem;font-weight:800;line-height:1.1;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-align:center;cursor:pointer;
   box-shadow:inset 0 -3px 0 var(--dhl-y),0 0 0 1px #d5dbe3;transform:translateZ(1px);transition:background .15s}
 .sm-plate:hover{background:#fffbea}
-.sm-plate sup{position:absolute;top:-6px;right:-4px;padding:0 3px;border-radius:6px;background:var(--warn);color:#fff;font-size:.52rem;line-height:12px}
 .sm-plate.free{background:var(--ok);color:#fff;box-shadow:inset 0 -3px 0 var(--okd)}
 .sm-plate.st-blocked{background:#DC2626;color:#fff;box-shadow:inset 0 -3px 0 #991B1B}
 .sm-plate.st-blocked:hover{background:#B91C1C}
@@ -152,11 +151,8 @@
 .sm-fill.part{background:#fde047}
 
 /* embarque: contorno que abraça os stages */
-.sm-hull{position:absolute;pointer-events:none;box-sizing:border-box;border:1.5px solid var(--hc);border-radius:8px;background:color-mix(in srgb,var(--hc) 4%,transparent);transform:translateZ(2px)}
-.sm-hlabel{pointer-events:auto;position:absolute;left:50%;bottom:100%;display:flex;align-items:baseline;gap:6px;height:22px;padding:0 8px;border:0;border-radius:6px 6px 0 0;background:var(--hc);color:#fff;font-size:.70rem;font-weight:800;line-height:22px;white-space:nowrap;min-width:max-content;box-sizing:border-box;cursor:pointer;transform-origin:50% 100%;transform:translateX(-50%) rotateX(calc(var(--tilt,0deg)*-1));box-shadow:0 2px 5px rgba(0,0,0,0.25);z-index:5}
-.sm-hlabel span{font-weight:600;font-size:.65rem;opacity:.9}
-.sm-hlabel .sm-dot{margin-right:-2px}
-.sm-plate-emb{display:block;font-size:0.56rem;font-weight:800;color:#1E40AF;line-height:1;margin-top:2px;letter-spacing:-0.02em}
+.sm-hull{position:absolute;pointer-events:none;box-sizing:border-box;border:1.5px solid var(--hc);border-radius:6px;background:color-mix(in srgb,var(--hc) 4%,transparent);transform:translateZ(2px)}
+.sm-plate-emb{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:0.48rem;font-weight:700;color:#475569;line-height:1;margin-top:1px;letter-spacing:-0.03em}
 
 /* esmaecer o que não combina com filtro/busca/foco */
 .sm-stage.is-dim .sm-pal{--c:#d3d9e0;--cd:#bcc4ce;animation:none;box-shadow:none}

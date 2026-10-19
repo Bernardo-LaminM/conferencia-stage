@@ -106,16 +106,16 @@ let database = null;
 // Gerador de todos os stages do armazém (Faixas 1 a 3 contínuas até o último stage SO142 + stages da base)
 function getAllMasterStages() {
   const set = new Set();
-  // Faixa 1: Docas SO001 a SO034
+  // Faixa 1: Docas SO01 a SO34
   for (let i = 1; i <= 34; i++) {
-    set.add('SO' + String(i).padStart(3, '0'));
+    set.add('SO' + String(i).padStart(2, '0'));
   }
-  // Faixa 2: Docas SO040 a SO076 (termina no ST76 ao lado da Sala de Operações)
+  // Faixa 2: Docas SO40 a SO76 (termina no ST76 ao lado da Sala de Operações)
   for (let i = 40; i <= 76; i++) {
-    set.add('SO' + String(i).padStart(3, '0'));
+    set.add('SO' + String(i).padStart(2, '0'));
   }
-  // Faixa 3: Docas SO129 a SO142 (até o último stage físico do armazém)
-  for (let i = 129; i <= 142; i++) {
+  // Faixa 3: Docas SO128 a SO148 (até o último stage físico do armazém)
+  for (let i = 128; i <= 148; i++) {
     set.add('SO' + String(i).padStart(3, '0'));
   }
 
@@ -125,14 +125,14 @@ function getAllMasterStages() {
       if (!e) return;
       const sList = Array.isArray(e.stages) ? e.stages : (e.stages ? String(e.stages).split(/[\s,]+/) : []);
       sList.forEach(s => {
-        const m = String(s).match(/\d+/);
-        if (m) set.add('SO' + String(m[0]).padStart(3, '0'));
+        const norm = normalizeStageName(s);
+        if (norm) set.add(norm);
       });
       if (e.paletes && Array.isArray(e.paletes)) {
         e.paletes.forEach(p => {
           if (p && p.stage) {
-            const m = String(p.stage).match(/\d+/);
-            if (m) set.add('SO' + String(m[0]).padStart(3, '0'));
+            const norm = normalizeStageName(p.stage);
+            if (norm) set.add(norm);
           }
         });
       }
@@ -190,12 +190,13 @@ function normalizeBarcode(code) {
 function normalizeStageName(stg) {
   if (!stg) return '';
   const s = String(stg).toUpperCase().trim().replace(/[\s\-_]/g, '');
-  // Reconhece ST, SO, STG, STAGE indistintamente, com ou sem sufixo de letra/vaga (ex: ST008, SO008, ST01A, SO01A, SO1A, ST02B -> SO001A, SO002B)
+  // Reconhece ST, SO, STG, STAGE indistintamente, com ou sem sufixo de letra/vaga (ex: ST008, SO008, ST01A, SO01A, SO1A, ST02B -> SO08, SO01A, SO02B)
   const m = s.match(/^(?:SO|ST|STG|STAGE)0*(\d+)([A-Z]*)$/i);
   if (m) {
     const num = parseInt(m[1], 10);
     const suffix = m[2] ? m[2].toUpperCase() : '';
-    return 'SO' + String(num).padStart(3, '0') + suffix;
+    const padLen = num < 100 ? 2 : 3;
+    return 'SO' + String(num).padStart(padLen, '0') + suffix;
   }
   return s;
 }
@@ -331,6 +332,9 @@ function saveStoredHistory(historyList) {
   try {
     localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(historyList));
     updateHistoryBadge();
+    if (window.DHL_DB && Array.isArray(historyList) && historyList.length > 0) {
+      window.DHL_DB.salvarConferencia(historyList[0]);
+    }
   } catch(e) {
     console.error('Erro ao gravar histórico:', e);
   }
@@ -389,6 +393,9 @@ function saveInventoryAlert(alertObj) {
     list.unshift(alertObj);
     localStorage.setItem(STORAGE_INVENTORY_ALERTS_KEY, JSON.stringify(list));
     updateHistoryBadge();
+    if (window.DHL_DB && alertObj) {
+      window.DHL_DB.salvarOcorrencia(alertObj);
+    }
   } catch(e) {}
 }
 
@@ -407,6 +414,16 @@ function saveBaseVersion(versionObj) {
     const list = getStoredBaseVersions();
     list.unshift(versionObj);
     localStorage.setItem(STORAGE_BASE_VERSIONS_KEY, JSON.stringify(list));
+    if (window.DHL_DB && versionObj) {
+      window.DHL_DB.salvarSnapshotBase({
+        nomeArquivo: versionObj.arquivo || versionObj.nomeArquivo || 'Base Local',
+        totalEmbarques: versionObj.embarques || versionObj.totalEmbarques || 0,
+        totalPaletes: versionObj.paletes || versionObj.totalPaletes || 0,
+        totalPecas: versionObj.pecas || versionObj.totalPecas || 0,
+        totalStages: versionObj.stages || versionObj.totalStages || 0,
+        alteracoes: versionObj.alteracoes || 'Importação de base'
+      });
+    }
   } catch(e) {}
 }
 
@@ -478,12 +495,41 @@ function persistActiveSession() {
 /* =========================================================
    CARREGAMENTO E MESCLAGEM DA BASE DE DADOS
    ========================================================= */
+function ensureEmbarqueAliases(db) {
+  if (!db || !db.embarques) return db;
+  Object.keys(db.embarques).forEach(k => {
+    const emb = db.embarques[k];
+    if (!emb || !emb.embarque) return;
+    const cleanKey = String(emb.embarque).replace(/^0+/, '');
+    if (cleanKey && cleanKey !== emb.embarque && !db.embarques[cleanKey]) {
+      db.embarques[cleanKey] = emb;
+    }
+  });
+  return db;
+}
+
+function saveCompactDatabaseToStorage(db) {
+  if (!db || !db.embarques) return;
+  try {
+    const compactEmbs = {};
+    Object.keys(db.embarques).forEach(k => {
+      const emb = db.embarques[k];
+      if (!emb || emb.embarque !== k) return; // salva apenas a chave canônica (50% menor)
+      compactEmbs[k] = emb;
+    });
+    const compactDb = Object.assign({}, db, { embarques: compactEmbs });
+    localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(compactDb));
+  } catch (e) {
+    console.warn('Armazenamento local cheio, mantendo em memória ativa:', e);
+  }
+}
+
 function loadData() {
   const embedded = window.EMBEDDED_STAGE_DATA;
   let customDb = null;
   try {
     const savedCustom = localStorage.getItem(STORAGE_DATABASE_OVERRIDE_KEY);
-    if (savedCustom) customDb = JSON.parse(savedCustom);
+    if (savedCustom) customDb = ensureEmbarqueAliases(JSON.parse(savedCustom));
   } catch(e) {
     console.warn('Erro ao carregar base salva no storage:', e);
   }
@@ -492,14 +538,16 @@ function loadData() {
   if (embedded && embedded.atualizado_em && customDb && customDb.atualizado_em) {
     const tEmb = new Date(embedded.atualizado_em).getTime();
     const tCust = new Date(customDb.atualizado_em).getTime();
-    if (tEmb >= tCust) {
-      database = JSON.parse(JSON.stringify(embedded));
-      try { localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(database)); } catch (e) {}
+    if (tEmb > tCust) {
+      database = ensureEmbarqueAliases(JSON.parse(JSON.stringify(embedded)));
+      saveCompactDatabaseToStorage(database);
     } else {
       database = customDb;
     }
+  } else if (customDb && customDb.embarques && Object.keys(customDb.embarques).length > 0 && customDb.atualizado_em) {
+    database = customDb;
   } else if (embedded && embedded.embarques && Object.keys(embedded.embarques).length > 0) {
-    database = JSON.parse(JSON.stringify(embedded));
+    database = ensureEmbarqueAliases(JSON.parse(JSON.stringify(embedded)));
   } else if (customDb && customDb.embarques && Object.keys(customDb.embarques).length > 0) {
     database = customDb;
   } else {
@@ -509,7 +557,7 @@ function loadData() {
         .then(r => r.ok ? r.json() : null)
         .then(j => {
           if (j && j.embarques && Object.keys(j.embarques).length > 0) {
-            database = j;
+            database = ensureEmbarqueAliases(j);
             updateBaseInfoUI();
             updateHistoryBadge();
             if (typeof renderYardGrid === 'function') renderYardGrid();
@@ -558,7 +606,8 @@ function updateBaseInfoUI() {
   const dataBase = database?.data_base || (database?.atualizado_em ? new Date(database.atualizado_em).toLocaleDateString('pt-BR') : dataHoje);
 
   if (navBadge) {
-    navBadge.textContent = `📊 Base: ${total} Cargas (${dataBase}${horaAtualizada})`;
+    navBadge.textContent = `${total} Cargas`;
+    navBadge.title = `Base: ${total} Cargas (${dataBase}${horaAtualizada}) · Clique para detalhes`;
   }
 
   const infoDetails = document.getElementById('infoBaseDetails');
@@ -737,11 +786,11 @@ function processExcelFile(file) {
 
   // 2. Processamento via SheetJS para planilhas .XLSX / .XLS
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const data = new Uint8Array(e.target.result);
-      if (typeof XLSX === 'undefined') {
-        throw new Error('Biblioteca XLSX não carregada.');
+      if (typeof XLSX === 'undefined' || typeof XLSX.read !== 'function') {
+        throw new Error('Biblioteca XLSX não carregada. Recarregue a página (Ctrl+F5) ou exporte em .csv.');
       }
       const workbook = XLSX.read(data, { type: 'array' });
       
@@ -772,6 +821,48 @@ function processExcelFile(file) {
 
       injetarParsedEmbarquesNoSistema(parsedEmbarques, file.name, isGuia);
     } catch(err) {
+      if (err && err.isLiveConnectionFile) {
+        if (feedback) {
+          feedback.innerHTML = `<div style="background: #EFF6FF; border: 1px solid #93C5FD; color: #1E40AF; padding: 12px; border-radius: var(--radius-sm);">⏳ O arquivo <b>${file.name}</b> (5 KB) contém apenas o vínculo de conexão do Power BI (<i>"Data connected to Power BI: Click refresh to update"</i>). Tentando extrair a execução real automaticamente...</div>`;
+        }
+        // 1. Tenta buscar a execução real via Servidor Local (que lê o data - *.xlsx completo da pasta Downloads/SharePoint)
+        try {
+          const apiUrls = ['/api/extrair-csv?include_data=1', 'http://127.0.0.1:8080/api/extrair-csv?include_data=1'];
+          for (const u of apiUrls) {
+            try {
+              const rLocal = await fetch(u, { cache: 'no-store' });
+              if (rLocal.ok) {
+                const jLocal = await rLocal.json();
+                if (jLocal && jLocal.ok && jLocal.database && jLocal.database.embarques) {
+                  injetarParsedEmbarquesNoSistema(jLocal.database.embarques, jLocal. database.origem || jLocal.arquivo, false);
+                  return;
+                }
+              }
+            } catch (eFetch) {}
+          }
+        } catch (e1) {}
+
+        // 2. Tenta executar a query DAX diretamente via Power BI Live (se token Entra ID / Power BI disponível)
+        if (window.POWERBI_SYNC && typeof window.POWERBI_SYNC.sincronizar === 'function') {
+          try {
+            const pbiRes = await window.POWERBI_SYNC.sincronizar({ direto: true });
+            if (pbiRes && (pbiRes.mudou || (window.database && Object.keys(window.database.embarques || {}).length > 0))) {
+              if (feedback) {
+                feedback.innerHTML = `<div style="background: var(--status-ok-bg); border: 1px solid var(--status-ok-border); color: #065F46; padding: 14px; border-radius: var(--radius-sm);"><b>✔ Conexão Dinâmica Executada via Power BI Live!</b><br>Os dados reais da tabela <code>itatiaia AD80</code> foram carregados com sucesso.</div>`;
+              }
+              return;
+            }
+          } catch (e2) {}
+        }
+
+        // 3. Fallback imediato para a base sincronizada embutida da tabela itatiaia AD80
+        if (window.EMBEDDED_STAGE_DATA && window.EMBEDDED_STAGE_DATA.embarques && Object.keys(window.EMBEDDED_STAGE_DATA.embarques).length > 0) {
+          injetarParsedEmbarquesNoSistema(window.EMBEDDED_STAGE_DATA.embarques, file.name, false);
+          return;
+        }
+        return;
+      }
+
       if (feedback) {
         feedback.innerHTML = `<div style="background: var(--status-diverg-bg); border: 1px solid var(--status-diverg-border); color: #B91C1C; padding: 14px; border-radius: var(--radius-sm);"><b>❌ Erro ao processar arquivo:</b> ${err.message}</div>`;
       }
@@ -786,6 +877,8 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
   if (embKeys.length === 0) {
     throw new Error('Não foi possível identificar dados de embarque/paletes. Verifique o formato.');
   }
+  const canonicalKeys = embKeys.filter(k => parsedEmbarques[k] && parsedEmbarques[k].embarque === k);
+  const effectiveKeys = canonicalKeys.length > 0 ? canonicalKeys : embKeys;
 
   // 1. Mapear stage -> embarque anterior
   const prevStageEmbarque = {};
@@ -852,29 +945,43 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
       });
 
       const now = new Date();
+      const nowIso = now.toISOString();
       const dataHoje = now.toLocaleDateString('pt-BR');
       const dataHoraHoje = now.toLocaleString('pt-BR');
 
       // 4. Substituição / Atualização da Base Operacional
       if (!isGuia || !database || !database.embarques || Object.keys(database.embarques).length === 0) {
-        // Planilha diária (WMS): substitui a base ativa pelos embarques de hoje
-        database = {
-          total_embarques: embKeys.length,
+        // Planilha diária (WMS / Power BI .xlsx): substitui a base ativa pelos embarques de hoje
+        database = ensureEmbarqueAliases({
+          total_embarques: effectiveKeys.length,
+          atualizado_em: nowIso,
           data_base: dataHoje,
           gerado_em: dataHoraHoje,
           arquivo_origem: nomeOrigem,
+          origem: nomeOrigem,
           embarques: parsedEmbarques
-        };
+        });
       } else {
         // Guia avulsa de embarque específico: atualiza/adiciona na base existente
         if (!database) database = { embarques: {} };
+        database.atualizado_em = nowIso;
         database.data_base = dataHoje;
         database.gerado_em = dataHoraHoje;
         database.arquivo_origem = nomeOrigem;
         embKeys.forEach(embId => {
           database.embarques[embId] = parsedEmbarques[embId];
         });
+        ensureEmbarqueAliases(database);
       }
+
+      // Mantém EMBEDDED_STAGE_DATA e metadados do PowerBI Sync alinhados para que o timer de 2.5s não sobrescreva o upload!
+      window.EMBEDDED_STAGE_DATA = database;
+      try {
+        const pbiMeta = JSON.parse(localStorage.getItem('pg_powerbi_meta_v1') || '{}');
+        pbiMeta.ts = nowIso;
+        pbiMeta.version = (pbiMeta.version || 0) + 1;
+        localStorage.setItem('pg_powerbi_meta_v1', JSON.stringify(pbiMeta));
+      } catch (e) {}
 
       // Limpa do storage conferências de embarques que não existem mais na base ativa
       Object.keys(partials).forEach(embId => {
@@ -889,10 +996,16 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
       } catch(e) {}
 
       let totalPaletesDepois = 0;
+      const seenEmbs = new Set();
       Object.values(database.embarques).forEach(e => {
-        if (e && e.embarque) totalPaletesDepois += (e.total_paletes || 0);
+        if (e && e.embarque && !seenEmbs.has(e.embarque)) {
+          seenEmbs.add(e.embarque);
+          totalPaletesDepois += (e.total_paletes || 0);
+        }
       });
-      const uniqueCount = new Set(Object.values(database.embarques).map(e => e.embarque)).size;
+      const uniqueCount = seenEmbs.size;
+      database.total_embarques = uniqueCount;
+      database.total_paletes = totalPaletesDepois;
 
       // Grava snapshot na Evolução da Base
       const evolSnapshot = {
@@ -900,16 +1013,12 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
         arquivo: nomeOrigem,
         totalEmbarques: uniqueCount,
         totalPaletes: totalPaletesDepois,
-        detalhes: `Upload de hoje processado: ${embKeys.length} embarques sincronizados. ${stagesMantidos} stages com mesmo embarque mantidos, ${stagesResetados} stages atualizados/resetados de acordo com a planilha.`
+        detalhes: `Upload processado: ${effectiveKeys.length} embarques (${totalPaletesDepois} paletes) sincronizados. ${stagesMantidos} stages mantidos, ${stagesResetados} stages atualizados.`
       };
       saveBaseVersion(evolSnapshot);
 
-      // Salva no localStorage a base customizada ativa de hoje
-      try {
-        localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(database));
-      } catch(errStorage) {
-        console.warn('Armazenamento local cheio, mantendo em memória ativa:', errStorage);
-      }
+      // Salva no localStorage a base customizada ativa de hoje (formato compacto sem duplicar chaves alias)
+      saveCompactDatabaseToStorage(database);
 
       // Sincroniza a nova base com todos os operadores na nuvem / GitHub Pages em tempo real!
       if (window.DHL_SYNC && typeof window.DHL_SYNC.notifyBaseUpdated === 'function') {
@@ -923,11 +1032,13 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
       }
 
       updateBaseInfoUI();
+      if (typeof renderYardGrid === 'function') renderYardGrid();
       if (typeof renderDashboard === 'function') {
         renderDashboard();
       }
+      window.dispatchEvent(new Event('stagemap:refresh'));
 
-      const firstEmb = embKeys[0];
+      const firstEmb = effectiveKeys[0];
       const firstData = parsedEmbarques[firstEmb];
 
       if (feedback) {
@@ -935,7 +1046,7 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
           <div style="background: var(--status-ok-bg); border: 1px solid var(--status-ok-border); color: #065F46; padding: 14px; border-radius: var(--radius-sm); font-size: 0.9rem;">
             <b>✔ Importação Concluída com Sucesso!</b><br>
             • Origem: <b>${nomeOrigem}</b><br>
-            • Embarques no Arquivo: <b>${embKeys.length}</b> (Total Únicos na Base: ${uniqueCount})<br>
+            • Embarques no Arquivo: <b>${effectiveKeys.length}</b> (Total Paletes: <b>${totalPaletesDepois}</b>)<br>
             • Data da Base: <b>${dataHoje}</b><br>
             • Stages Mantidos: <b>${stagesMantidos}</b> | Stages Atualizados/Resetados: <b>${stagesResetados}</b><br>
             • Exemplo Carregado: <b>${firstEmb}</b> (${firstData.total_paletes} paletes, Stage ${formatStages(firstData.stages)})<br>
@@ -955,7 +1066,7 @@ function injetarParsedEmbarquesNoSistema(parsedEmbarques, nomeOrigem, isGuia = f
         });
       }
 
-      showToast(`✔ Planilha de hoje carregada! ${embKeys.length} embarques sincronizados.`);
+      showToast(`✔ Planilha carregada! ${effectiveKeys.length} embarques e ${totalPaletesDepois} paletes sincronizados.`);
 
       const inputEmb = document.getElementById('inputEmbarque');
       if (inputEmb && !inputEmb.value) {
@@ -1079,14 +1190,27 @@ function parseWmsWorkbook(workbook) {
 
   for (const name of workbook.SheetNames) {
     const lower = name.toLowerCase();
-    if (lower.includes('sheet4') || lower.includes('aloc') || lower.includes('palete') || lower.includes('stage')) {
-      allocSheet = workbook.Sheets[name];
+    if (lower.includes('detail')) continue;
+    if (!allocSheet && (lower === 'export' || lower.includes('sheet4') || lower.includes('aloc') || lower.includes('palete') || lower.includes('stage') || lower.includes('export') || lower.includes('adhoc') || lower.includes('data'))) {
+      const candidate = workbook.Sheets[name];
+      if (candidate && candidate['!ref']) {
+        allocSheet = candidate;
+      }
     }
     if (lower.includes('sheet5') || lower.includes('mat') || lower.includes('prod') || lower.includes('sku')) {
       matSheet = workbook.Sheets[name];
     }
   }
 
+  if (!allocSheet) {
+    // Escolhe a primeira aba que possua dados (!ref) e não seja Export Details
+    for (const name of workbook.SheetNames) {
+      if (!name.toLowerCase().includes('detail') && workbook.Sheets[name] && workbook.Sheets[name]['!ref']) {
+        allocSheet = workbook.Sheets[name];
+        break;
+      }
+    }
+  }
   if (!allocSheet) {
     allocSheet = workbook.Sheets[workbook.SheetNames[0]];
   }
@@ -1102,38 +1226,82 @@ function parseWmsWorkbook(workbook) {
   }
 
   const rows = XLSX.utils.sheet_to_json(allocSheet, { header: 1, defval: '' });
-  if (rows.length < 2) return {};
+  if (rows.length < 2) {
+    const detailsSheet = workbook.Sheets['Export Details'];
+    if (detailsSheet) {
+      const detRows = XLSX.utils.sheet_to_json(detailsSheet, { header: 1, defval: '' });
+      const detText = detRows.map(r => (r || []).join(' ')).join(' ');
+      if (/connected to power bi|click refresh/i.test(detText)) {
+        const liveErr = new Error('Este arquivo .xlsx foi exportado do Power BI como "Tabela com conexão dinâmica" (vazio, apenas 5 KB).');
+        liveErr.isLiveConnectionFile = true;
+        throw liveErr;
+      }
+    }
+    return {};
+  }
 
   let headerRow = 0;
-  let idxEmb = 0, idxPal = 2, idxStage = 3, idxSku = 4, idxQtd = 6, idxLote = 5;
+  let idxEmb = 0, idxPal = 2, idxStage = 3, idxSku = 4, idxQtd = 6, idxLote = 5, idxOrd = -1;
 
-  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+  for (let r = 0; r < Math.min(rows.length, 10); r++) {
     const row = rows[r] || [];
+    const rowStr = row.map(c => String(c).toLowerCase()).join(' ');
+    // Só considera como cabeçalho a linha que tem nome de coluna de embarque/palete (ex.: export do Power BI)
+    if (!/car_move|embarque|pallet_id|palete|lpn|etiqueta/.test(rowStr)) continue;
+    headerRow = r;
     row.forEach((cell, idx) => {
-      const str = String(cell).toLowerCase().trim();
-      if (str.includes('embarque') || str.includes('car_move')) { idxEmb = idx; headerRow = r; }
-      if (str.includes('palete') || str.includes('pallet_id') || str.includes('lpn') || str.includes('etiqueta')) { idxPal = idx; headerRow = r; }
-      if (str.includes('stage') || str.includes('dstloc')) { idxStage = idx; headerRow = r; }
-      if (str.includes('sku') || str.includes('prtnum') || str.includes('material')) { idxSku = idx; headerRow = r; }
-      if (str.includes('qtd') || str.includes('quantidade') || str.includes('pckqty') || str.includes('caixa')) { idxQtd = idx; headerRow = r; }
-      if (str.includes('lote')) { idxLote = idx; headerRow = r; }
+      const str = String(cell).replace(/[\[\]'"]/g, '').toLowerCase().trim();
+      if (str.includes('embarque') || str.includes('car_move')) idxEmb = idx;
+      if (str.includes('palete') || str.includes('pallet_id') || str.includes('lpn') || str.includes('etiqueta')) idxPal = idx;
+      if (str.includes('stage') || str.includes('dstloc')) idxStage = idx;
+      if (str.includes('sku') || str.includes('prtnum') || str.includes('material')) idxSku = idx;
+      if (str.includes('qtd') || str.includes('quantidade') || str.includes('pckqty') || str.includes('caixa')) idxQtd = idx;
+      if (str === 'lot' || str.includes('lote') || str.includes('lotnum')) idxLote = idx;
+      if (str.includes('ordnum') || str === 'order' || str.includes('ordem')) idxOrd = idx;
     });
+    break;
   }
 
   const embarquesDict = {};
+  let lastEmbId = '', lastPalId = '', lastStage = '', lastOrdNum = '';
+  const hasMerges = Array.isArray(allocSheet['!merges']) && allocSheet['!merges'].length > 0;
 
   for (let r = headerRow + 1; r < rows.length; r++) {
     const row = rows[r] || [];
-    const embId = String(row[idxEmb] || '').trim();
-    const palId = String(row[idxPal] || '').trim();
+    let rawEmb = String(row[idxEmb] || '').trim();
+    let rawPal = String(row[idxPal] || '').trim();
+    let rawStage = String(row[idxStage] || '').trim();
+    let rawOrd = idxOrd !== -1 ? String(row[idxOrd] || '').trim() : '';
+    const sku = String(row[idxSku] || '').trim();
+
+    const lowerEmb = rawEmb.toLowerCase();
+    if (lowerEmb === 'total' || lowerEmb.startsWith('total ') || lowerEmb.includes('filtro aplicado') || lowerEmb.includes('filtros aplicados') || lowerEmb.includes('applied filters')) {
+      continue;
+    }
+
+    // Suporte a exportação "Dados com layout atual" do Power BI (células mescladas)
+    if (hasMerges && !rawEmb && lastEmbId && (rawPal || sku)) rawEmb = lastEmbId;
+    if (hasMerges && !rawPal && lastPalId && sku) rawPal = lastPalId;
+    if (hasMerges && !rawStage && lastStage && rawPal) rawStage = lastStage;
+    if (hasMerges && !rawOrd && lastOrdNum && rawEmb) rawOrd = lastOrdNum;
+
+    const embId = rawEmb;
+    const palId = rawPal;
 
     if (!embId || !palId) continue;
+    if (palId.toLowerCase() === 'total') continue;
 
-    const stage = String(row[idxStage] || '').trim();
-    const sku = String(row[idxSku] || '').trim();
+    lastEmbId = embId;
+    lastPalId = palId;
+    if (rawStage) lastStage = rawStage;
+    if (rawOrd) lastOrdNum = rawOrd;
+
+    const stage = normalizeStageName(rawStage);
     const lote = String(row[idxLote] || '').trim();
     const desc = skuMap.get(sku) || `Material ${sku}`;
-    const qtd = parseInt(row[idxQtd]) || 0;
+    const qtdRaw = row[idxQtd];
+    const qtd = typeof qtdRaw === 'number' ? Math.round(qtdRaw) : (Math.round(parseFloat(String(qtdRaw).replace(/\./g, '').replace(',', '.'))) || 0);
+    const ordNum = rawOrd;
 
     if (!embarquesDict[embId]) {
       embarquesDict[embId] = {
@@ -1150,7 +1318,10 @@ function parseWmsWorkbook(workbook) {
       embObj.paletesMap.set(palId, {
         palete: palId,
         stage: stage,
+        order_num: ordNum,
+        lote: lote,
         itens: [],
+        _itemMap: new Map(),
         qtd_total: 0,
         sku_resumo: sku,
         desc_resumo: desc
@@ -1158,7 +1329,15 @@ function parseWmsWorkbook(workbook) {
     }
 
     const pObj = embObj.paletesMap.get(palId);
-    pObj.itens.push({ sku, lote, qtd });
+    const itemKey = `${sku}|${lote}`;
+    if (pObj._itemMap.has(itemKey)) {
+      pObj._itemMap.get(itemKey).qtd += qtd;
+    } else {
+      const newItem = { sku, lote, qtd };
+      if (ordNum) newItem.order_num = ordNum;
+      pObj._itemMap.set(itemKey, newItem);
+      pObj.itens.push(newItem);
+    }
     pObj.qtd_total += qtd;
   }
 
@@ -1167,7 +1346,10 @@ function parseWmsWorkbook(workbook) {
     const emb = embarquesDict[embId];
     const palList = Array.from(emb.paletesMap.values());
     let totalQtd = 0;
-    palList.forEach(p => totalQtd += p.qtd_total);
+    palList.forEach(p => {
+      delete p._itemMap;
+      totalQtd += p.qtd_total;
+    });
 
     const embData = {
       embarque: embId,
@@ -1191,6 +1373,19 @@ function parseWmsWorkbook(workbook) {
 /* =========================================================
    NAVEGAÇÃO ENTRE TELAS
    ========================================================= */
+window.irParaConferencia = function() {
+  // Fecha modais eventualmente abertos para voltar direto à Conferência
+  ['modalStageDetail', 'modalUpload', 'modalHistorico', 'modalBase', 'modalPowerBi', 'modalSync'].forEach(id => {
+    const m = document.getElementById(id);
+    if (m) m.style.display = 'none';
+  });
+  if (activeEmbarque) {
+    showScreen('viewScanner');
+  } else {
+    showScreen('viewLogin');
+  }
+};
+
 function showScreen(screenId) {
   document.getElementById('viewLogin').style.display = (screenId === 'viewLogin') ? 'flex' : 'none';
   document.getElementById('viewScanner').style.display = (screenId === 'viewScanner') ? 'flex' : 'none';
@@ -1199,13 +1394,38 @@ function showScreen(screenId) {
   const viewCons = document.getElementById('viewConsolidacao');
   if (viewCons) viewCons.style.display = (screenId === 'viewConsolidacao') ? 'flex' : 'none';
 
+  const isConfScreen = (screenId === 'viewLogin' || screenId === 'viewScanner');
+  const btnConf = document.getElementById('btnNavConferencia');
+  if (btnConf) {
+    btnConf.style.background = isConfScreen ? '#0F172A' : '';
+    btnConf.style.color = isConfScreen ? '#FFFFFF' : '';
+    btnConf.style.borderColor = isConfScreen ? '#0F172A' : '';
+  }
+
+  const is3D = (screenId === 'viewDashboard' && window.StageMap && window.StageMap.mode === '3d');
+  const is2D = (screenId === 'viewDashboard' && !is3D);
+
+  const btnDash = document.getElementById('btnToggleDashboard');
+  if (btnDash) {
+    btnDash.style.background = is2D ? '#0F172A' : '';
+    btnDash.style.color = is2D ? '#FFFFFF' : '';
+    btnDash.style.borderColor = is2D ? '#0F172A' : '';
+  }
+
+  const btn3D = document.getElementById('btnOperacao3D');
+  if (btn3D) {
+    btn3D.style.background = is3D ? '#0F172A' : '';
+    btn3D.style.color = is3D ? '#FFFFFF' : '';
+    btn3D.style.borderColor = is3D ? '#0F172A' : '';
+  }
+
   // Botão de consolidação sempre visível na navbar
   const btnCons = document.getElementById('btnToggleConsolidacao');
   if (btnCons) {
     btnCons.style.display = 'inline-flex';
-    btnCons.style.background = (screenId === 'viewConsolidacao')
-      ? 'linear-gradient(135deg, #059669 0%, #00A650 100%)'
-      : '';
+    btnCons.style.background = (screenId === 'viewConsolidacao') ? '#0F172A' : '';
+    btnCons.style.color = (screenId === 'viewConsolidacao') ? '#FFFFFF' : '';
+    btnCons.style.borderColor = (screenId === 'viewConsolidacao') ? '#0F172A' : '';
   }
 
   if (screenId === 'viewLogin') {
@@ -2043,9 +2263,12 @@ window.confirmarRebipagemLpn = function(e) {
    ========================================================= */
 window.toggleDashboard = function() {
   const isDash = document.getElementById('viewDashboard')?.style.display === 'block';
-  if (isDash) {
+  if (isDash && (!window.StageMap || window.StageMap.mode !== '3d')) {
     closeDashboard();
   } else {
+    if (window.StageMap && window.StageMap.mode === '3d' && typeof window.StageMap.setMode === 'function') {
+      window.StageMap.setMode('2d');
+    }
     showScreen('viewDashboard');
   }
 };
@@ -2263,12 +2486,13 @@ function getDashboardStageInfo(stageCode) {
   };
 }
 
-let currentDashViewMode = 'lanes';
+let currentDashViewMode = 'cards';
 
 window.setDashViewMode = function(mode) {
-  currentDashViewMode = mode;
-  document.getElementById('btnModeLanes')?.classList.toggle('active', mode === 'lanes');
-  document.getElementById('btnModeCards')?.classList.toggle('active', mode === 'cards');
+  currentDashViewMode = 'cards';
+  document.getElementById('btnModeLayout')?.classList.remove('active');
+  document.getElementById('btnMode3D')?.classList.remove('active');
+  document.getElementById('btnModeCards')?.classList.add('active');
   renderDashboard();
 };
 
@@ -2831,6 +3055,16 @@ window.openStageDetailModal = function(stageCode, highlightSlot = null, paleteIn
   body.innerHTML = macroRulerHtml + palletBoxHtml + slotsHtml + embDetailsHtml;
 
   // 7. Configuração dos botões do rodapé
+  const footerInfo = document.getElementById('stageDetailFooterInfo');
+  if (footerInfo) {
+    const isStgBlk = window.isStageBlocked && window.isStageBlocked(cleanStageCode);
+    footerInfo.innerHTML = `
+      <button type="button" class="btn-secondary-clean" onclick="closeStageDetailModal(); solicitarToggleBloqueioStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: ${isStgBlk ? '#16A34A' : '#EF4444'}; color: ${isStgBlk ? '#15803D' : '#DC2626'}; font-weight: 800; background: ${isStgBlk ? '#F0FDF4' : '#FEF2F2'};">
+        ${isStgBlk ? '🔓 Desbloquear Stage ' + cleanStageCode : '🔒 Bloquear Stage ' + cleanStageCode}
+      </button>
+    `;
+  }
+
   if (btnVerPatio) {
     btnVerPatio.onclick = () => {
       localizarStageNoPatio(cleanStageCode);
@@ -2848,7 +3082,12 @@ window.openStageDetailModal = function(stageCode, highlightSlot = null, paleteIn
         entrarNoEmbarque();
       };
     } else {
-      btnConf.style.display = 'none';
+      btnConf.style.display = 'inline-flex';
+      btnConf.textContent = `Ir para Conferência`;
+      btnConf.onclick = () => {
+        closeStageDetailModal();
+        if (typeof window.irParaConferencia === 'function') window.irParaConferencia();
+      };
     }
   }
 
@@ -3810,6 +4049,23 @@ function finalizarAlocacaoPalete(foundPallet, stgFisico, currentSlot, locCode, i
 
   // 5. Avança para a próxima vaga física no stage
   activeConference.activeSlot = calculateNextTargetSlot(stgFisico);
+
+  if (window.DHL_DB && typeof window.DHL_DB.salvarBipagem === 'function') {
+    window.DHL_DB.salvarBipagem({
+      embarque: activeEmbarque ? activeEmbarque.embarque : activeConference.embarqueId,
+      operador: activeConference.operador,
+      lpn: foundPallet.palete,
+      stageFisico: stgFisico,
+      vaga: currentSlot,
+      modoCarga: activeConference.modoEmpilhamento || (paletesList.length === 2 ? '2x' : paletesList.length >= 3 ? '3x' : '1x'),
+      status: isDivergent ? 'divergent' : 'done',
+      isDivergente: isDivergent,
+      sku: foundPallet.sku_resumo || '',
+      lote: (foundPallet.itens && foundPallet.itens[0] && foundPallet.itens[0].lote) || foundPallet.lote || inputLote || '',
+      qtd: inputQtd || foundPallet.qtd_total || 0,
+      motivo: auditNotes || (isDivergent ? 'Divergência detectada' : '')
+    });
+  }
 
   recordActiveConferenceToHistory('Em Andamento');
   persistActiveSession();
@@ -5636,7 +5892,8 @@ function initApp() {
     }
   }
 
-  if (inputEmb) {
+  if (inputEmb && inputEmb.dataset.dhlInputBound !== '1') {
+    inputEmb.dataset.dhlInputBound = '1';
     inputEmb.focus();
     inputEmb.addEventListener('input', atualizarStatusBotaoLogin);
     inputEmb.addEventListener('keydown', (e) => {
@@ -5647,7 +5904,8 @@ function initApp() {
     });
   }
 
-  if (inputOp) {
+  if (inputOp && inputOp.dataset.dhlInputBound !== '1') {
+    inputOp.dataset.dhlInputBound = '1';
     inputOp.addEventListener('input', atualizarStatusBotaoLogin);
     inputOp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -5657,14 +5915,16 @@ function initApp() {
     });
   }
 
-  if (btnLogin) {
+  if (btnLogin && btnLogin.dataset.dhlClickBound !== '1') {
+    btnLogin.dataset.dhlClickBound = '1';
     btnLogin.addEventListener('click', entrarNoEmbarque);
   }
 
   atualizarStatusBotaoLogin();
 
   const barcodeInput = document.getElementById('barcodeInput');
-  if (barcodeInput) {
+  if (barcodeInput && barcodeInput.dataset.dhlInputBound !== '1') {
+    barcodeInput.dataset.dhlInputBound = '1';
     barcodeInput.addEventListener('input', handleBarcodeInput);
     barcodeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -5675,8 +5935,16 @@ function initApp() {
     });
   }
 
-  document.getElementById('btnTrocarEmbarque')?.addEventListener('click', trocarEmbarque);
-  document.getElementById('btnReiniciarConferencia')?.addEventListener('click', reiniciarConferencia);
+  const btnTrocar = document.getElementById('btnTrocarEmbarque');
+  if (btnTrocar && btnTrocar.dataset.dhlClickBound !== '1') {
+    btnTrocar.dataset.dhlClickBound = '1';
+    btnTrocar.addEventListener('click', trocarEmbarque);
+  }
+  const btnReiniciar = document.getElementById('btnReiniciarConferencia');
+  if (btnReiniciar && btnReiniciar.dataset.dhlClickBound !== '1') {
+    btnReiniciar.dataset.dhlClickBound = '1';
+    btnReiniciar.addEventListener('click', reiniciarConferencia);
+  }
 
   let lastToggleSoundTime = 0;
   window.toggleSound = function() {
@@ -5690,12 +5958,12 @@ function initApp() {
     if (btnSound) {
       if (sound.soundEnabled) {
         btnSound.classList.remove('muted');
-        btnSound.innerHTML = '<span id="soundIcon">🔊</span> Som';
+        btnSound.innerHTML = '<span id="soundIcon">🔊</span>';
         sound.playSuccess('Som ativado');
         showToast('Som e voz ativados.');
       } else {
         btnSound.classList.add('muted');
-        btnSound.innerHTML = '<span id="soundIcon">🔇</span> Mudo';
+        btnSound.innerHTML = '<span id="soundIcon">🔇</span>';
         try {
           if ('speechSynthesis' in window) window.speechSynthesis.cancel();
         } catch(e){}
@@ -5704,57 +5972,83 @@ function initApp() {
     }
   };
 
-  document.getElementById('btnSoundToggle')?.addEventListener('click', window.toggleSound);
+  function bindClick(id, handler) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.removeAttribute('onclick');
+    el.removeAttribute('data-csp-onclick');
+    el.dataset.dhlDirectBound = '1';
+    if (el.dataset.dhlClickBound === '1') return;
+    el.dataset.dhlClickBound = '1';
+    el.addEventListener('click', handler);
+  }
 
-  document.getElementById('btnFinalizar')?.addEventListener('click', finalizarConferencia);
-  document.getElementById('btnExportarRelatorio')?.addEventListener('click', exportarCSV);
+  // Barra de Navegação Principal (100% compatível com CSP do SharePoint)
+  bindClick('brandHomeLink', () => { if (typeof window.irParaConferencia === 'function') window.irParaConferencia(); });
+  bindClick('btnNavConferencia', () => { if (typeof window.irParaConferencia === 'function') window.irParaConferencia(); });
+  bindClick('btnToggleDashboard', () => { if (typeof window.toggleDashboard === 'function') window.toggleDashboard(); });
+  bindClick('btnOperacao3D', () => { if (typeof window.abrirOperacao3D === 'function') window.abrirOperacao3D(); });
+  bindClick('btnToggleConsolidacao', () => { if (typeof window.toggleConsolidacao === 'function') window.toggleConsolidacao(); });
+  bindClick('btnScannerConsolidacao', () => { if (typeof window.toggleConsolidacao === 'function') window.toggleConsolidacao(); });
+  bindClick('btnPowerBiModal', () => { if (typeof window.openPowerBiModal === 'function') window.openPowerBiModal(); });
+  bindClick('navSyncStatus', () => { if (typeof window.openSyncModal === 'function') window.openSyncModal(); });
+  bindClick('btnSoundToggle', window.toggleSound);
+
+  bindClick('btnFinalizar', finalizarConferencia);
+  bindClick('btnExportarRelatorio', exportarCSV);
 
   // Modais de Upload e Base
-  document.getElementById('btnUploadModal')?.addEventListener('click', window.openUploadModal);
-  document.getElementById('btnQuickUpload')?.addEventListener('click', window.openUploadModal);
-  document.getElementById('btnCloseModalUpload')?.addEventListener('click', () => { 
+  bindClick('btnUploadModal', window.openUploadModal);
+  bindClick('btnQuickUpload', window.openUploadModal);
+  bindClick('btnCloseModalUpload', () => { 
     const m = document.getElementById('modalUpload');
     if (m) m.style.display = 'none'; 
   });
-  document.getElementById('btnFecharUpload')?.addEventListener('click', () => { 
+  bindClick('btnFecharUpload', () => { 
     const m = document.getElementById('modalUpload');
     if (m) m.style.display = 'none'; 
   });
 
   // Modal de Histórico Unificado
-  document.getElementById('btnVerHistorico')?.addEventListener('click', () => openHistoryModal('conf'));
-  document.getElementById('btnCloseModalHist')?.addEventListener('click', () => { document.getElementById('modalHistorico').style.display = 'none'; });
-  document.getElementById('btnFecharModalHist')?.addEventListener('click', () => { document.getElementById('modalHistorico').style.display = 'none'; });
-  document.getElementById('btnExportarTodoHistorico')?.addEventListener('click', exportarTodoHistoricoCSV);
-  document.getElementById('btnExportarOcorrenciasCSV')?.addEventListener('click', exportarOcorrenciasCSV);
+  bindClick('btnVerHistorico', () => openHistoryModal('conf'));
+  bindClick('btnCloseModalHist', () => { const m = document.getElementById('modalHistorico'); if (m) m.style.display = 'none'; });
+  bindClick('btnFecharModalHist', () => { const m = document.getElementById('modalHistorico'); if (m) m.style.display = 'none'; });
+  bindClick('btnExportarTodoHistorico', exportarTodoHistoricoCSV);
+  bindClick('btnExportarOcorrenciasCSV', exportarOcorrenciasCSV);
 
   // Chip de Informações da Base
-  document.getElementById('navBaseCount')?.addEventListener('click', () => {
-    document.getElementById('modalBase').style.display = 'flex';
+  bindClick('navBaseCount', () => {
+    const m = document.getElementById('modalBase');
+    if (m) m.style.display = 'flex';
   });
-  document.getElementById('btnCloseModalBase')?.addEventListener('click', () => {
-    document.getElementById('modalBase').style.display = 'none';
+  bindClick('btnCloseModalBase', () => {
+    const m = document.getElementById('modalBase');
+    if (m) m.style.display = 'none';
   });
-  document.getElementById('btnFecharModalBase')?.addEventListener('click', () => {
-    document.getElementById('modalBase').style.display = 'none';
+  bindClick('btnFecharModalBase', () => {
+    const m = document.getElementById('modalBase');
+    if (m) m.style.display = 'none';
   });
 
   // Modal de Conclusão
-  document.getElementById('btnCloseModal')?.addEventListener('click', () => {
-    document.getElementById('modalRelatorio').style.display = 'none';
+  bindClick('btnCloseModal', () => {
+    const m = document.getElementById('modalRelatorio');
+    if (m) m.style.display = 'none';
     focusScanner();
   });
-  document.getElementById('btnOkModal')?.addEventListener('click', () => {
-    document.getElementById('modalRelatorio').style.display = 'none';
+  bindClick('btnOkModal', () => {
+    const m = document.getElementById('modalRelatorio');
+    if (m) m.style.display = 'none';
     showScreen('viewLogin');
   });
-  document.getElementById('btnPrintModal')?.addEventListener('click', () => window.print());
+  bindClick('btnPrintModal', () => window.print());
 
   // Drag & Drop e Seleção de Arquivo Excel
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('excelFileInput');
 
-  if (dropZone && fileInput) {
+  if (dropZone && fileInput && dropZone.dataset.dhlDropBound !== '1') {
+    dropZone.dataset.dhlDropBound = '1';
     dropZone.addEventListener('click', (e) => {
       if (e.target !== fileInput) fileInput.click();
     });
@@ -5784,17 +6078,22 @@ function initApp() {
   }
 
   // Foco inteligente no scanner
-  document.addEventListener('click', (e) => {
-    const isScannerVisible = document.getElementById('viewScanner')?.style.display !== 'none';
-    const isAnyModalOpen = modalUpload?.style.display === 'flex' || 
-                           document.getElementById('modalHistorico')?.style.display === 'flex' || 
-                           document.getElementById('modalBase')?.style.display === 'flex' || 
-                           document.getElementById('modalRelatorio')?.style.display === 'flex';
+  if (!window.__DHL_SCANNER_FOCUS_BOUND__) {
+    window.__DHL_SCANNER_FOCUS_BOUND__ = true;
+    document.addEventListener('click', (e) => {
+      const isScannerVisible = document.getElementById('viewScanner')?.style.display !== 'none';
+      const isAnyModalOpen = document.getElementById('modalUpload')?.style.display === 'flex' || 
+                             document.getElementById('modalHistorico')?.style.display === 'flex' || 
+                             document.getElementById('modalBase')?.style.display === 'flex' || 
+                             document.getElementById('modalRelatorio')?.style.display === 'flex';
 
-    if (isScannerVisible && !isAnyModalOpen && !['INPUT', 'BUTTON', 'A', 'SELECT', 'LABEL'].includes(e.target.tagName)) {
-      focusScanner();
-    }
-  });
+      if (isScannerVisible && !isAnyModalOpen && !['INPUT', 'BUTTON', 'A', 'SELECT', 'LABEL'].includes(e.target.tagName)) {
+        focusScanner();
+      }
+    });
+  }
+
+  setupCspSafeEventDelegation();
 }
 
 /* =========================================================
@@ -5879,17 +6178,19 @@ window.StageMapAdapter = (function () {
 })();
 
 /* =========================================================
-   OPERAÇÃO EM 3D: PÁTIO, DOCAS E PALETES ISOMÉTRICOS
+   MAPA DO PÁTIO 2D / 3D (PLANTA DO PÁTIO E DOCAS)
    ========================================================= */
 window.abrirOperacao3D = function() {
+  const isDash = document.getElementById('viewDashboard')?.style.display === 'block';
+  if (isDash && window.StageMap && window.StageMap.mode === '3d') {
+    closeDashboard();
+    return;
+  }
   showScreen('viewDashboard');
   if (typeof window.StageMap !== 'undefined' && typeof window.StageMap.showLayout === 'function') {
-    window.StageMap.showLayout();
-    window.StageMap.setMode('3d');
-    if (typeof window.StageMap.cam === 'function') window.StageMap.cam('iso');
-    else if (typeof window.StageMap.setPreset === 'function') window.StageMap.setPreset('iso');
+    window.StageMap.showLayout('3d');
   }
-  showToast('🌐 Operação 3D Ativa: Arraste o mouse para orbitar e inspecione as docas.');
+  showScreen('viewDashboard');
 };
 
 /* =========================================================
@@ -6063,6 +6364,240 @@ window.StageMapConsolidacaoAdapter = function() {
   };
 };
 
+/* =========================================================
+   DELEGADOR DE EVENTOS CSP-SAFE (100% COMPATÍVEL COM SHAREPOINT)
+   Substitui onclick/onchange/oninput/onsubmit/onkeydown inline sem usar eval()
+   ========================================================= */
+function splitByCharOutsideQuotes(str, sepChar) {
+  const parts = [];
+  let cur = '';
+  let quote = null;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (quote) {
+      if (ch === quote && str[i - 1] !== '\\') quote = null;
+      cur += ch;
+    } else {
+      if (ch === "'" || ch === '"') {
+        quote = ch;
+        cur += ch;
+      } else if (ch === sepChar) {
+        parts.push(cur.trim());
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts;
+}
+
+function parseCspArgToken(token, elem, event) {
+  const t = token.trim();
+  if (!t) return undefined;
+  if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith('"') && t.endsWith('"'))) {
+    return t.slice(1, -1);
+  }
+  if (t === 'event' || t === 'e') return event;
+  if (t === 'this') return elem;
+  if (t === 'this.value') return elem ? elem.value : '';
+  if (t === 'true') return true;
+  if (t === 'false') return false;
+  if (t === 'null') return null;
+  if (t === 'undefined') return undefined;
+  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+  return window[t];
+}
+
+function executeSingleCspStatement(stmt, elem, event) {
+  let s = stmt.trim();
+  if (!s) return;
+
+  // Suporte a if(typeof fn === 'function') fn()
+  const ifMatch = s.match(/^if\s*\([^)]+\)\s*(.+)$/);
+  if (ifMatch) {
+    s = ifMatch[1].trim();
+  }
+
+  if (s === 'event.stopPropagation()' || s === 'e.stopPropagation()') {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    return;
+  }
+  if (s === 'event.preventDefault()' || s === 'e.preventDefault()') {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    return;
+  }
+
+  // Suporte a document.getElementById('X').style.display='Y'
+  const domStyleMatch = s.match(/^document\.getElementById\(\s*(['"])([^'"]+)\1\s*\)\.style\.([a-zA-Z0-9_]+)\s*=\s*(['"])([^'"]*)\4$/);
+  if (domStyleMatch) {
+    const target = document.getElementById(domStyleMatch[2]);
+    if (target) target.style[domStyleMatch[3]] = domStyleMatch[5];
+    return;
+  }
+
+  // Suporte a chamada de função/método: fn(a, b) ou Obj.method(a, b)
+  const fnMatch = s.match(/^([a-zA-Z0-9_$.]+)\s*\(([\s\S]*)\)$/);
+  if (fnMatch) {
+    const fnPath = fnMatch[1].split('.');
+    const rawArgs = fnMatch[2].trim();
+    let ctx = window;
+    let fn = window;
+    for (let i = 0; i < fnPath.length; i++) {
+      ctx = fn;
+      fn = fn ? fn[fnPath[i]] : undefined;
+    }
+    if (typeof fn === 'function') {
+      const args = rawArgs ? splitByCharOutsideQuotes(rawArgs, ',').map(a => parseCspArgToken(a, elem, event)) : [];
+      fn.apply(ctx === window ? window : ctx, args);
+    }
+  }
+}
+
+function executeCspSafeInlineCode(codeStr, elem, event) {
+  if (!codeStr) return;
+  const statements = splitByCharOutsideQuotes(codeStr, ';');
+  for (let i = 0; i < statements.length; i++) {
+    try {
+      executeSingleCspStatement(statements[i], elem, event);
+    } catch (err) {
+      console.warn('[CSP Safe Handler]', statements[i], err);
+    }
+  }
+}
+
+function convertInlineHandlersToCspSafe(root) {
+  const container = root && root.querySelectorAll ? root : document;
+  const attrs = ['onclick', 'onchange', 'oninput', 'onsubmit', 'onkeydown'];
+  attrs.forEach(attr => {
+    const list = container.querySelectorAll ? Array.from(container.querySelectorAll('[' + attr + ']')) : [];
+    if (root && root.nodeType === 1 && root.hasAttribute && root.hasAttribute(attr)) {
+      list.unshift(root);
+    }
+    list.forEach(el => {
+      if (el.dataset && el.dataset.dhlDirectBound === '1' && attr === 'onclick') {
+        el.removeAttribute(attr);
+        return;
+      }
+      const val = el.getAttribute(attr);
+      if (val) {
+        el.setAttribute('data-csp-' + attr, val);
+      }
+      el.removeAttribute(attr);
+    });
+  });
+}
+
+function setupCspSafeEventDelegation() {
+  convertInlineHandlersToCspSafe(document);
+
+  if (window.__DHL_CSP_DELEGATION_READY__) return;
+  window.__DHL_CSP_DELEGATION_READY__ = true;
+
+  document.addEventListener('click', (e) => {
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    const el = e.target.closest('[data-csp-onclick],[onclick]');
+    if (!el || (el.dataset && el.dataset.dhlDirectBound === '1')) return;
+    const code = el.getAttribute('data-csp-onclick') || el.getAttribute('onclick');
+    if (el.hasAttribute('onclick')) {
+      el.setAttribute('data-csp-onclick', code);
+      el.removeAttribute('onclick');
+    }
+    if (code) executeCspSafeInlineCode(code, el, e);
+  });
+
+  document.addEventListener('change', (e) => {
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    const el = e.target.closest('[data-csp-onchange],[onchange]');
+    if (!el) return;
+    const code = el.getAttribute('data-csp-onchange') || el.getAttribute('onchange');
+    if (el.hasAttribute('onchange')) {
+      el.setAttribute('data-csp-onchange', code);
+      el.removeAttribute('onchange');
+    }
+    if (code) executeCspSafeInlineCode(code, el, e);
+  });
+
+  document.addEventListener('input', (e) => {
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    const el = e.target.closest('[data-csp-oninput],[oninput]');
+    if (!el) return;
+    const code = el.getAttribute('data-csp-oninput') || el.getAttribute('oninput');
+    if (el.hasAttribute('oninput')) {
+      el.setAttribute('data-csp-oninput', code);
+      el.removeAttribute('oninput');
+    }
+    if (code) executeCspSafeInlineCode(code, el, e);
+  });
+
+  document.addEventListener('submit', (e) => {
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    const el = e.target.closest('[data-csp-onsubmit],[onsubmit]');
+    if (!el) return;
+    const code = el.getAttribute('data-csp-onsubmit') || el.getAttribute('onsubmit');
+    if (el.hasAttribute('onsubmit')) {
+      el.setAttribute('data-csp-onsubmit', code);
+      el.removeAttribute('onsubmit');
+    }
+    if (code) executeCspSafeInlineCode(code, el, e);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    const el = e.target.closest('[data-csp-onkeydown],[onkeydown]');
+    if (!el) return;
+    const code = el.getAttribute('data-csp-onkeydown') || el.getAttribute('onkeydown');
+    if (el.hasAttribute('onkeydown')) {
+      el.setAttribute('data-csp-onkeydown', code);
+      el.removeAttribute('onkeydown');
+    }
+    if (code) executeCspSafeInlineCode(code, el, e);
+  });
+
+  if (typeof MutationObserver !== 'undefined' && document.body) {
+    const obs = new MutationObserver((mutations) => {
+      for (let i = 0; i < mutations.length; i++) {
+        const added = mutations[i].addedNodes;
+        for (let j = 0; j < added.length; j++) {
+          const node = added[j];
+          if (node && node.nodeType === 1) {
+            convertInlineHandlersToCspSafe(node);
+          }
+        }
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+  }
+}
+
+/* =========================================================
+   EXPORTAÇÃO GLOBAL DE FUNÇÕES PARA ESCOPO WINDOW (SPFx)
+   ========================================================= */
+window.initApp = initApp;
+window.loadData = loadData;
+window.updateBaseInfoUI = updateBaseInfoUI;
+window.showToast = showToast;
+window.showScreen = showScreen;
+window.renderDashboard = renderDashboard;
+window.renderStageSlotsGrid = renderStageSlotsGrid;
+window.renderConsolidacao = renderConsolidacao;
+window.updateUI = updateUI;
+window.renderDistribuicaoPaletes = renderDistribuicaoPaletes;
+window.renderHistorico = renderHistorico;
+window.fecharModalStageLotado = fecharModalStageLotado;
+window.toggleRoteirizacaoGlobal = toggleRoteirizacaoGlobal;
+window.openHistoryModal = openHistoryModal;
+window.atualizarViaSqlServer = window.atualizarViaSqlServer || function() {
+  if (typeof window.openPowerBiModal === 'function') {
+    const m = document.getElementById('modalUpload');
+    if (m) m.style.display = 'none';
+    window.openPowerBiModal();
+  } else if (typeof showToast === 'function') {
+    showToast('Use o módulo Power BI Live para consultar a view WMS.');
+  }
+};
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
@@ -6106,44 +6641,135 @@ window.extrairCsvSharePoint = async function() {
   const originalText = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '⏳ Extraindo do CSV...';
+    btn.innerHTML = '⏳ Extraindo base real...';
   }
 
   if (typeof showToast === 'function') {
-    showToast('Iniciando extração do CSV do SharePoint via API...');
+    showToast('Buscando arquivo data - *.xlsx / ADHOC_80 mais recente...');
   }
 
   try {
-    const res = await fetch('/api/extrair-csv?include_data=1', { cache: 'no-cache' });
-    const data = await res.json();
+    const isSharePoint = Boolean(window.spContext && window.spContext.pageContext && window.spContext.pageContext.web);
+    let data = null;
 
-    if (!res.ok || !data.ok) {
-      throw new Error(data.message || data.error || 'Falha ao extrair CSV.');
-    }
-
-    if (data.database && data.database.embarques) {
-      window.database = data.database;
-      try {
-        localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(data.database));
-      } catch (e) {}
-    } else {
-      const r2 = await fetch('stage_data.json?t=' + Date.now());
-      if (r2.ok) {
-        const j2 = await r2.json();
-        window.database = j2;
-        try { localStorage.setItem(STORAGE_DATABASE_OVERRIDE_KEY, JSON.stringify(j2)); } catch (e) {}
+    // 1. Tenta servidor local (funciona em http://localhost:8080 e também via file:// se o servidor local estiver ativo)
+    if (!isSharePoint) {
+      const localUrls = ['/api/extrair-csv?include_data=1', 'http://127.0.0.1:8080/api/extrair-csv?include_data=1'];
+      for (const u of localUrls) {
+        try {
+          const res = await fetch(u, { cache: 'no-store' });
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (res.ok && ct.includes('application/json')) {
+            const j = await res.json();
+            if (j && j.ok) {
+              data = j;
+              break;
+            }
+          }
+        } catch (eLocal) {}
       }
     }
 
-    if (typeof loadData === 'function') loadData();
-    if (typeof updateBaseInfoUI === 'function') updateBaseInfoUI();
-    if (typeof renderYardGrid === 'function') renderYardGrid();
-    if (typeof renderDashboard === 'function' && document.getElementById('viewDashboard')?.style.display === 'block') {
-      renderDashboard();
+    // 2. Se estiver no SharePoint Online, lista os arquivos da biblioteca para encontrar qualquer "data - *.xlsx", "data*.xlsx" ou "ADHOC_80.*"
+    if (!data && isSharePoint) {
+      const webUrl = window.spContext.pageContext.web.absoluteUrl;
+      const relRoot = window.spContext.pageContext.web.serverRelativeUrl.replace(/\/$/, '');
+      const folders = ['Shared%20Documents', 'Documentos%20Compartilhados'];
+      const candidateFiles = [];
+
+      for (const folder of folders) {
+        try {
+          const listUrl = `${webUrl}/_api/web/GetFolderByServerRelativeUrl('${relRoot}/${folder}')/Files?$select=Name,ServerRelativeUrl,Length,TimeLastModified&$orderby=TimeLastModified desc&$top=25`;
+          const rList = await fetch(listUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json;odata=nometadata' } });
+          if (rList.ok) {
+            const jList = await rList.json();
+            const files = jList.value || (jList.d && jList.d.results) || [];
+            files.forEach(f => {
+              const name = f.Name || '';
+              const size = parseInt(f.Length || '0', 10);
+              const isXlsx = /\.xlsx$/i.test(name);
+              const isCsv = /\.csv$/i.test(name);
+              if ((isXlsx || isCsv) && /^(data|adhoc_80)/i.test(name)) {
+                if (isXlsx && size > 0 && size < 10240) return; // ignora arquivo de 5KB de conexão vazia
+                candidateFiles.push({
+                  url: `${webUrl}/_api/web/GetFileByServerRelativeUrl('${f.ServerRelativeUrl}')/$value`,
+                  name: name,
+                  isXlsx: isXlsx,
+                  mtime: new Date(f.TimeLastModified || 0).getTime()
+                });
+              }
+            });
+          }
+        } catch (eList) {}
+      }
+
+      candidateFiles.sort((a, b) => b.mtime - a.mtime);
+
+      // Adiciona caminhos diretos caso a listagem da pasta seja restrita
+      ['ADHOC_80.xlsx', 'data.xlsx', 'ADHOC_80.csv'].forEach(fn => {
+        folders.forEach(folder => {
+          candidateFiles.push({
+            url: `${webUrl}/_api/web/GetFileByServerRelativeUrl('${relRoot}/${folder}/${fn}')/$value`,
+            name: fn,
+            isXlsx: /\.xlsx$/i.test(fn)
+          });
+        });
+      });
+
+      for (const item of candidateFiles) {
+        try {
+          const rFile = await fetch(item.url, { credentials: 'same-origin' });
+          if (rFile.ok) {
+            const t0 = Date.now();
+            let parsed = {};
+            if (item.isXlsx && typeof XLSX !== 'undefined') {
+              const buf = await rFile.arrayBuffer();
+              if (buf.byteLength < 10240) continue;
+              const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+              parsed = parseWmsWorkbook(wb);
+            } else {
+              const csvText = await rFile.text();
+              if (csvText && csvText.length > 50 && !csvText.trim().startsWith('<')) {
+                parsed = parseDirectCsvText(csvText);
+              }
+            }
+            const count = Object.keys(parsed).length;
+            if (count > 0) {
+              injetarParsedEmbarquesNoSistema(parsed, `SharePoint (${item.name})`, false);
+              const uniqueSet = new Set();
+              let totalPal = 0, totalPecas = 0;
+              const stgSet = new Set();
+              Object.values(parsed).forEach(e => {
+                if (e && e.embarque && !uniqueSet.has(e.embarque)) {
+                  uniqueSet.add(e.embarque);
+                  totalPal += (e.total_paletes || 0);
+                  totalPecas += (e.total_pecas || 0);
+                  (e.stages || []).forEach(s => stgSet.add(s));
+                }
+              });
+              data = {
+                ok: true,
+                database: window.database,
+                total_embarques: uniqueSet.size,
+                total_paletes: totalPal,
+                total_pecas: totalPecas,
+                total_stages: stgSet.size,
+                tempo_processamento_ms: Date.now() - t0,
+                arquivo: `SharePoint Online (${item.name})`
+              };
+              break;
+            }
+          }
+        } catch (e) {}
+      }
     }
 
-    if (typeof showToast === 'function') {
-      showToast(`✔ Base atualizada! ${data.total_embarques} embarques e ${data.total_paletes} paletes carregados.`, 5000);
+    if (!data || !data.ok) {
+      throw new Error('Servidor local (porta 8080) não detectado ou nenhum arquivo data - *.xlsx novo encontrado na biblioteca do SharePoint. Arraste ou selecione o arquivo .xlsx (exportado com "Dados com layout atual" ou "Excel 150.000 linhas") na caixa tracejada acima.');
+    }
+
+    if (data.database && data.database.embarques) {
+      injetarParsedEmbarquesNoSistema(data.database.embarques, data.database.origem || pathFromUrl(data.arquivo), false);
     }
 
     const feedback = document.getElementById('uploadFeedback');
@@ -6151,27 +6777,26 @@ window.extrairCsvSharePoint = async function() {
       feedback.style.display = 'block';
       feedback.innerHTML = `
         <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 12px; color: #166534; font-size: 0.85rem; margin-top: 10px;">
-          <b>✔ Extração do CSV Concluída em ${data.tempo_processamento_ms || 0}ms!</b><br>
+          <b>✔ Extração Real Concluída (${data.tempo_processamento_ms || 0}ms)!</b><br>
           • Total de Embarques: <b>${data.total_embarques}</b><br>
           • Total de Paletes: <b>${data.total_paletes}</b><br>
           • Total de Peças: <b>${data.total_pecas || 0}</b><br>
           • Stages Mapeados: <b>${data.total_stages || 0}</b><br>
-          • Origem: <code>${data.arquivo || 'SharePoint ADHOC_80.csv'}</code>
+          • Arquivo Lido: <code>${data.arquivo}</code>
         </div>
       `;
     }
   } catch (err) {
-    console.error('Erro na extração do CSV:', err);
+    console.error('Erro na extração:', err);
     if (typeof showToast === 'function') {
-      showToast('❌ Erro: ' + err.message, 6000);
+      showToast('⚠️ ' + err.message, 6000);
     }
     const feedback = document.getElementById('uploadFeedback');
     if (feedback) {
       feedback.style.display = 'block';
       feedback.innerHTML = `
         <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 8px; padding: 12px; color: #991B1B; font-size: 0.85rem; margin-top: 10px;">
-          <b>❌ Falha na Extração do CSV:</b> ${err.message}<br>
-          <small>Verifique se o SharePoint está sincronizado no PC ou se o servidor Node.js está ativo.</small>
+          <b>⚠️ Extração Direta:</b> ${err.message}
         </div>
       `;
     }
@@ -6182,5 +6807,11 @@ window.extrairCsvSharePoint = async function() {
     }
   }
 };
+
+function pathFromUrl(str) {
+  if (!str) return 'data.xlsx';
+  const parts = String(str).split(/[\\/]/);
+  return parts[parts.length - 1] || str;
+}
 
 

@@ -339,9 +339,12 @@
     const dot = document.getElementById('syncStatusDot');
     const txt = document.getElementById('syncStatusText');
     const badge = document.getElementById('syncPeersCount');
+    const chip = document.getElementById('navSyncStatus');
+    const peers = Math.max(1, activePeers.size + 1);
     if (dot) dot.className = 'sync-status-dot ' + (isMqttConnected ? 'online' : 'connecting');
-    if (txt) txt.textContent = isMqttConnected ? 'On-Time' : (typeof mqtt === 'undefined' ? 'Local (Aba)' : 'Conectando...');
-    if (badge) badge.textContent = `${Math.max(1, activePeers.size + 1)} online`;
+    if (txt) txt.textContent = isMqttConnected ? 'On-Time' : 'Local';
+    if (badge) badge.textContent = `${peers} online`;
+    if (chip) chip.title = `Sincronização ${isMqttConnected ? 'On-Time' : 'Local'} · ${peers} dispositivo(s) conectado(s)`;
   }
 
   /* ---------------- API pública ---------------- */

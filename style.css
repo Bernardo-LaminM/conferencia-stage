@@ -71,81 +71,94 @@ html, body {
 }
 
 /* =========================================================
-   NAVBAR CLEAN & ELEGANTE
+   NAVBAR EXECUTIVA CORPORATIVA (DHL SUPPLY CHAIN)
    ========================================================= */
 .top-nav {
   background: #FFFFFF;
   border-bottom: 1px solid var(--border-light);
-  padding: 8px 24px;
-  min-height: 64px;
-  height: auto;
+  padding: 0 20px;
+  height: 54px;
+  min-height: 54px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   position: sticky;
   top: 0;
   z-index: 50;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-  flex-wrap: wrap;
-  gap: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  flex-wrap: nowrap;
+  gap: 12px;
 }
 .brand-group {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 .dhl-logo {
-  height: 32px;
+  height: 28px;
   width: auto;
   object-fit: contain;
   border-radius: 3px;
 }
 .nav-divider {
   width: 1px;
-  height: 24px;
+  height: 22px;
   background: var(--border-light);
 }
 .nav-titles {
   display: flex;
   flex-direction: column;
+  line-height: 1.15;
 }
 .nav-app-name {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.2px;
+  white-space: nowrap;
 }
 .nav-app-sub {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.65rem;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-actions::-webkit-scrollbar {
+  display: none;
 }
 .btn-icon-nav {
-  background: transparent;
+  background: #FFFFFF;
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
-  padding: 7px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 600;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .btn-icon-nav:hover {
   background: var(--surface-muted);
   color: var(--text-primary);
+  border-color: #CBD5E1;
 }
 .btn-icon-nav.muted {
   color: var(--text-muted);
@@ -1145,32 +1158,37 @@ html, body {
   background: var(--surface-muted);
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .nav-sync-chip {
-  background: #F0FDF4;
-  border: 1px solid #BBF7D0;
-  color: #166534;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
+  background: #FFFFFF;
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 0.74rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
   user-select: none;
 }
 .nav-sync-chip:hover {
-  background: #DCFCE7;
-  border-color: #86EFAC;
-  transform: translateY(-1px);
+  background: var(--surface-muted);
+  border-color: #CBD5E1;
 }
 .sync-status-dot {
   width: 8px;
@@ -1495,38 +1513,41 @@ html, body {
    TELA DE DASHBOARD VISUAL (MAPA DO PÁTIO / EXPEDIÇÃO)
    ========================================================= */
 .dashboard-screen {
-  max-width: 1440px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 24px;
+  padding: 14px 20px;
   width: 100%;
 }
 .dash-header-card {
   background: #FFFFFF;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  padding: 20px 24px;
-  margin-bottom: 20px;
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
 }
 .dash-title-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 18px;
+  align-items: center;
+  margin-bottom: 0;
   flex-wrap: wrap;
   gap: 12px;
 }
+.dash-kpi-bar {
+  margin-top: 14px;
+}
 .dash-main-title {
-  font-size: 1.3rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--text-primary);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.2px;
 }
 .dash-main-sub {
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
   font-weight: 600;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 /* KPIs do Pátio */
@@ -2337,20 +2358,9 @@ html, body {
 
 /* Botão navbar de consolidação */
 .btn-nav-consolidacao {
-  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%) !important;
-  color: #FFFFFF !important;
-  border: none !important;
-  font-weight: 800 !important;
   display: inline-flex !important;
   align-items: center;
   gap: 6px;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
-  transition: all 0.15s ease;
-}
-.btn-nav-consolidacao:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.5);
-  opacity: 0.95;
 }
 
 /* Header Card */

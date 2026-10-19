@@ -16,7 +16,7 @@
  * Para forçar atualização: StageMap.refresh() ou window.dispatchEvent(new Event('stagemap:refresh')). */
 (function () {
   'use strict';
-  var CW = 44, CH = 44, LAB = 34, PLATE = 28, PLATE_GAP = 6, PADH = 8, ZT = 28;
+  var CW = 44, CH = 44, LAB = 6, PLATE = 28, PLATE_GAP = 6, PADH = 5, ZT = 26;
   var GAPW = { parede: 44, corredor: 18, sala: 72 };
   var POS = 'ABCDEFGHIJ'.split('');
 
@@ -147,10 +147,25 @@
     var stages = Object.keys(map).map(function (id) {
       var s = map[id], by = {}, loose = [], ec = {}, over = 0;
       s.items.forEach(function (it) { if (it.emb) ec[it.emb] = (ec[it.emb] || 0) + 1; if (it.pos) (by[it.pos] = by[it.pos] || []).push(it); else loose.push(it); });
-      loose.forEach(function (it) { var p = P.filter(function (q) { return !by[q]; })[0]; if (p) by[p] = [it]; else over++; });
+      var looseIdx = 0;
+      loose.forEach(function (it) {
+        var p = P.filter(function (q) { return !by[q]; })[0];
+        if (p) {
+          by[p] = [it];
+        } else {
+          var targetSlot = P[looseIdx % P.length];
+          if (!by[targetSlot]) by[targetSlot] = [];
+          by[targetSlot].push(it);
+          looseIdx++;
+          over++;
+        }
+      });
       var slots = P.filter(function (q) { return by[q]; }).map(function (q) {
         var g = by[q], f = g[0], x = { pos: q, status: worst(g), lpn: f.lpn, sku: f.sku, lote: f.lote, qtd: f.qtd, cap: f.cap, desc: f.desc };
-        if (g.length > 1) x.paletes = g.map(function (y) { return { lpn: y.lpn, status: y.status, sku: y.sku }; });
+        if (g.length > 1) {
+          x.paletes = g.map(function (y) { return { lpn: y.lpn, status: y.status, sku: y.sku, lote: y.lote, qtd: y.qtd, emb: y.emb }; });
+          x.qtd = g.reduce(function (tot, y) { return tot + (+y.qtd || 0); }, 0);
+        }
         return x;
       });
       var embs = Object.keys(ec).sort(function (a, b) { return ec[b] - ec[a]; });
@@ -293,15 +308,19 @@
     if (SM.raw.focus != null && !SM._f) { SM.focus = String(SM.raw.focus); SM._f = 1; }
     build(); render();
   }
-  SM.setMode = function (m) { if (m === SM.mode) return; SM.mode = m; applyMode(true); };
-  var CAMS = { frente: { tilt: 42, yaw: 0 }, iso: { tilt: 52, yaw: -8 } };
-  SM.cam = function (name) {
-    var c = CAMS[name]; if (!c) return;
-    SM.tilt = c.tilt; SM.yaw = c.yaw; SM.mode = '3d'; syncSliders(); applyMode(true);
+  SM.setMode = function (m) {
+    var target = (m === '3d') ? '3d' : '2d';
+    SM.tilt = 42; SM.yaw = 0;
+    if (target === SM.mode) { applyMode(false); return; }
+    SM.mode = target;
+    applyMode(true);
+  };
+  SM.cam = function () {
+    SM.tilt = 42; SM.yaw = 0; SM.mode = '3d';
+    applyMode(true);
   };
   function syncSliders() {
-    ['tilt', 'yaw'].forEach(function (k) { var i = SM.root.querySelector('[data-r="' + k + '"]'); if (i) i.value = Math.round(SM[k]); });
-    var z = SM.root.querySelector('[data-r="zoom"]'); if (z) z.value = Math.round(SM.zoom * 100);
+    var z = SM.root && SM.root.querySelector('[data-r="zoom"]'); if (z) z.value = Math.round(SM.zoom * 100);
   }
   function refit() { if (SM.raf) cancelAnimationFrame(SM.raf); SM.raf = requestAnimationFrame(fit); }
   function onDown(ev) {
@@ -421,16 +440,7 @@
       occOf(s).forEach(function (x) { e.tot++; if (x.status === 'conferido') e.ok++; if (x.status === 'divergencia') e.bad++; });
     });
 
-    var h = '<div class="sm-bar"><div class="sm-seg" role="group" aria-label="Modo de visualização"><button data-m="2d">2D</button><button data-m="3d">3D</button></div>' +
-      '<div class="sm-seg" data-3d role="group" aria-label="Câmera"><button data-cam="frente">Frente</button><button data-cam="iso">Isométrica</button></div>' +
-      '<button class="sm-icon' + (SM.adv ? ' on' : '') + '" data-gear title="Câmera, zoom e visual" aria-label="Ajustes de câmera e visual">' + SVG_GEAR + '</button>' +
-      '<div class="sm-bar-end"><span class="sm-src" aria-live="polite"></span><button class="sm-icon" data-refresh title="Atualizar agora" aria-label="Atualizar dados">' + SVG_SYNC + '</button></div></div>' +
-      '<div class="sm-adv' + (SM.adv ? ' open' : '') + '">' +
-      '<label class="sm-rng" data-3d>Inclinação <input type="range" min="15" max="75" value="' + SM.tilt + '" data-r="tilt"></label>' +
-      '<label class="sm-rng" data-3d>Giro <input type="range" min="-60" max="60" value="' + SM.yaw + '" data-r="yaw"></label>' +
-      '<label class="sm-rng">Zoom <input type="range" min="50" max="200" value="' + Math.round(SM.zoom * 100) + '" data-r="zoom"></label>' +
-      '<label class="sm-tog" data-3d><input type="checkbox" data-real' + (SM.real ? ' checked' : '') + '> Visual realista</label>' +
-      '<span class="sm-hint">Arraste: girar (3D) ou mover (2D) · Shift+arraste: mover · Ctrl+scroll: zoom</span></div>';
+    var h = '';
 
     if (o.resumo && !o.planner) {
       var k = summary(d.stages), pct = k.pal ? Math.round(100 * k.conferido / k.pal) : 0;
@@ -445,13 +455,9 @@
         '<div class="sm-prog" title="' + pct + '% dos paletes conferidos"><i style="width:' + pct + '%"></i></div></div>';
     }
 
-    if (order.length) h += '<div class="sm-embs">' + order.map(function (id) {
-      var e = emb[id], pct = e.tot ? Math.round(100 * e.ok / e.tot) : 0, cs = cargaStatus(e);
-      return '<button class="sm-chip' + (SM.focus === id ? ' on' : '') + '" data-e="' + esc(id) + '" style="--hc:' + e.color + '" title="Embarque ' + esc(id) + ' · ' + CNAME[cs] + ' · ' + e.ok + '/' + e.tot + (e.bad ? ' · ' + e.bad + ' divergência(s)' : '') + '"><u class="sm-dot s-' + cs + '"></u><b>Emb. ' + esc(id) + '</b><span>' + e.ok + '/' + e.tot + '</span>' + (e.bad ? '<i class="sm-badc">' + e.bad + '</i>' : '') + '<em style="width:calc((100% - 16px)*' + (pct / 100) + ')"></em></button>';
-    }).join('') + '</div>';
-
     if (o.planner) {
-      h += '<div class="sm-plan"><div class="sm-seg"><button data-v="antes" class="' + (SM.view === 'antes' ? 'on' : '') + '">Antes</button><button data-v="depois" class="' + (SM.view === 'depois' ? 'on' : '') + '">Depois</button></div>' +
+      h += '<div class="sm-plan"><div class="sm-seg"><button data-m="2d" class="' + (SM.mode === '2d' ? 'on' : '') + '">2D</button><button data-m="3d" class="' + (SM.mode === '3d' ? 'on' : '') + '">3D</button></div>' +
+        '<div class="sm-seg"><button data-v="antes" class="' + (SM.view === 'antes' ? 'on' : '') + '">Antes</button><button data-v="depois" class="' + (SM.view === 'depois' ? 'on' : '') + '">Depois</button></div>' +
         '<label>Destino <select data-po="destino"><option value="completar"' + (SM.po.destino === 'completar' ? ' selected' : '') + '>Completar palete existente</option><option value="novo"' + (SM.po.destino === 'novo' ? ' selected' : '') + '>Montar palete novo</option></select></label>' +
         '<label><input type="checkbox" data-po="liberar"' + (SM.po.liberar ? ' checked' : '') + '> Liberar stages inteiros</label>' +
         '<label><input type="checkbox" data-po="aguard"' + (SM.po.aguard ? ' checked' : '') + '> Incluir aguardando</label></div>';
@@ -466,16 +472,15 @@
       return '<button class="sm-rchip' + (r.type === 'move' ? ' mv' : '') + '" data-ri="' + i + '" title="' + esc(tip) + '"><em>' + (i + 1) + '</em>' + esc(r.from.id) + esc(r.from.pos) + ' → ' + esc(r.to.id) + esc(r.to.pos) + '</button>';
     }).join('') + '</div>';
 
-    h += '<div class="sm-viewport"><div class="sm-floor" data-mode="' + SM.mode + '" data-look="' + (SM.real ? 'real' : 'clean') + '">';
+    h += '<div class="sm-viewport"><div class="sm-floor" data-mode="' + SM.mode + '" data-look="clean"' + (SM.mode === '2d' ? ' data-flat' : '') + '>';
     if (!d.stages.length) h += '<div class="sm-empty"><b>Nenhum stage na base</b><span>Atualize a base (Excel, SQL ou Power BI) para ver o pátio.</span></div>';
     else h += yard(d, emb);
     h += '</div></div>';
     if (o.legenda) {
       h += '<div class="sm-foot"><div class="sm-leg">' + ['conferido', 'aguardando', 'divergencia', 'ativo'].map(function (k) {
         return '<span><i class="st-' + k + '"></i>' + NAMES[k] + '</span>';
-      }).join('') + '<span><i class="lg-livre"></i>Vaga livre</span><span><i class="lg-bloq"></i>Stage bloqueado</span><span class="sm-sep">Carga</span>' + ['conferido', 'parcial', 'aguardando'].map(function (k) {
-        return '<span><u class="sm-dot s-' + k + '"></u>' + CNAME[k] + '</span>';
-      }).join('') + '</div>' + (d.semStage ? '<span class="sm-warn" title="Linhas da base sem stage/localização reconhecível">' + d.semStage + ' palete(s) sem stage</span>' : '') + '</div>';
+      }).join('') + '<span><i class="lg-livre"></i>Vaga livre</span><span><i class="lg-bloq"></i>Stage bloqueado</span></div>' +
+      '<div class="sm-bar-end"><span class="sm-src" aria-live="polite"></span><button class="sm-icon" data-refresh title="Atualizar agora" aria-label="Atualizar dados">' + SVG_SYNC + '</button></div></div>';
     }
     h += '<div class="sm-tip" role="tooltip"></div>';
     var vp0 = SM.root.querySelector('.sm-viewport'), sl = vp0 ? vp0.scrollLeft : 0;
@@ -506,25 +511,20 @@
       return '<div class="sm-zone" style="left:' + b.a + 'px;width:' + (b.b - b.a) + 'px"><b>' + esc(b.nome) + '</b><span>' + esc(b.l) + arrow + esc(b.r) + '</span></div>';
     }).join('');
     runs.forEach(function (r) {
-      var e = emb[r.e], cs = cargaStatus(e), top = ZT + LAB - PADH + (M - r.len) * CH;
-      hulls += '<div class="sm-hull" data-e="' + esc(r.e) + '" style="--hc:' + e.color + ';left:' + r.a + 'px;top:' + top + 'px;width:' + (r.b - r.a) + 'px;height:' + (PADH + PLATE + PLATE_GAP + r.len * CH + PADH) + 'px">' +
-        '<button class="sm-hlabel s-' + cs + '" data-e="' + esc(r.e) + '" title="Embarque ' + esc(r.e) + ' · ' + e.ok + '/' + e.tot + ' conferidos">' +
-        '<u class="sm-dot s-' + cs + '"></u>' +
-        '<b>Emb. ' + esc(r.e) + '</b>' +
-        '<span>' + e.ok + '/' + e.tot + '</span>' +
-        '</button></div>';
+      var e = emb[r.e], top = ZT + LAB - PADH + (M - r.len) * CH;
+      hulls += '<div class="sm-hull" data-e="' + esc(r.e) + '" style="--hc:' + e.color + ';left:' + r.a + 'px;top:' + top + 'px;width:' + (r.b - r.a) + 'px;height:' + (PADH + PLATE + PLATE_GAP + r.len * CH + PADH) + 'px"></div>';
     });
     return '<div class="sm-yard" style="width:' + G.W + 'px;height:' + G.H + 'px"><div class="sm-zones">' + zones + '</div>' + h + hulls + routeSvg(d.routes || []) + '</div>' + docks(G.W, d.docas, emb);
   }
 
   function stageHtml(s, x, top) {
     var P = SM.opts.positions, V = vagasOf(s), isBlk = blocked(s), occ = occOf(s), len = s.len || V.length;
-    var fora = occ.filter(function (q) { return V.indexOf(q.pos) < 0; }).length + (s.excedente || 0);
+    var embShort = s.embarque ? String(s.embarque).replace(/^0+/, '') : '';
     var h = '<div class="sm-stage' + (isBlk ? ' is-blocked' : '') + '" data-id="' + esc(s.id) + '" style="left:' + x + 'px;top:' + top + 'px">' +
       '<button class="sm-plate' + (isBlk ? ' st-blocked' : '') + (s.liberado ? ' free' : '') + '" data-st="' + esc(s.id) + '" aria-label="Stage ' + esc(s.id) + (isBlk ? ' (bloqueado)' : '') + ', ' + occ.length + ' de ' + V.length + ' vagas ocupadas">' +
       (isBlk ? SVG_LOCK : '') + esc(s.id) +
-      (s.embarque ? '<span class="sm-plate-emb" title="Embarque ' + esc(s.embarque) + '">' + esc(s.embarque) + '</span>' : '') +
-      (fora ? '<sup title="Paletes sem vaga">+' + fora + '</sup>' : '') + '</button><div class="sm-slots">';
+      (embShort ? '<span class="sm-plate-emb">' + esc(embShort) + '</span>' : '') +
+      '</button><div class="sm-slots">';
     for (var i = 0; i < len; i++) {
       if (i >= V.length) { h += '<div class="sm-slot obst" title="Sem vaga útil (obstáculo)"></div>'; continue; }
       var p = P[i], x2 = (s.slots || []).filter(function (q) { return q.pos === p; })[0] || {}, st = x2.status || 'livre';
@@ -690,8 +690,9 @@
     if ((b = t.closest('.sm-plate'))) {
       hideTip();
       if (SM.opts.onStage) return SM.opts.onStage(stageById(b.dataset.st));
+      if (ev.shiftKey && typeof window.solicitarToggleBloqueioStage === 'function') return window.solicitarToggleBloqueioStage(b.dataset.st);
+      if (typeof window.openStageDetailModal === 'function') return window.openStageDetailModal(b.dataset.st);
       if (typeof window.solicitarToggleBloqueioStage === 'function') return window.solicitarToggleBloqueioStage(b.dataset.st);
-      if (typeof window.openStageDetailModal === 'function') window.openStageDetailModal(b.dataset.st);
       return;
     }
     if ((b = t.closest('.sm-pal'))) {
@@ -773,17 +774,25 @@
   SM.detectar = function () { DET.at = 0; DET.path = null; var a = autoDetect(); return a ? { fonte: a.name, linhas: Array.isArray(a.value) ? a.value.length : (a.value.stages || []).length, adaptador: typeof window.StageMapAdapter === 'function' } : { fonte: null, adaptador: typeof window.StageMapAdapter === 'function' }; };
 
   /* ---- Integração com a tela "Mapa de Stages" existente (só se os elementos existirem) ---- */
-  SM.showLayout = function () {
+  SM.showLayout = function (mode) {
+    var targetMode = (mode === '3d') ? '3d' : (mode === '2d' ? '2d' : SM.mode);
     var c = $('dashStagesContainer'); if (c) c.style.display = 'none';
+    var kb = $('dashKpiBar'); if (kb) kb.style.display = 'none';
+    var ft = $('dashFilterToolbar'); if (ft) ft.style.display = 'none';
     SM.root.style.display = '';
-    ['btnModeLanes', 'btnModeCards'].forEach(function (id) { var b = $(id); if (b) b.classList.remove('active'); });
-    var l = $('btnModeLayout'); if (l) l.classList.add('active');
+    var bCards = $('btnModeCards'); if (bCards) bCards.classList.remove('active');
+    var b2d = $('btnModeLayout'); if (b2d) b2d.classList.toggle('active', targetMode !== '3d');
+    var b3d = $('btnMode3D'); if (b3d) b3d.classList.toggle('active', targetMode === '3d');
     SM.refresh(true);
+    SM.setMode(targetMode);
   };
   SM.hideLayout = function () {
     var c = $('dashStagesContainer'); if (c) c.style.display = '';
+    var kb = $('dashKpiBar'); if (kb) kb.style.display = '';
+    var ft = $('dashFilterToolbar'); if (ft) ft.style.display = '';
     if (SM.root) SM.root.style.display = 'none';
-    var l = $('btnModeLayout'); if (l) l.classList.remove('active');
+    var b2d = $('btnModeLayout'); if (b2d) b2d.classList.remove('active');
+    var b3d = $('btnMode3D'); if (b3d) b3d.classList.remove('active');
   };
 
   function boot() {
@@ -801,13 +810,13 @@
       if (typeof se === 'function') window.selecionarEmbarqueConsolidacao = function (v) { var r = se.apply(this, arguments); cm.setFocus(v); cm.refresh(true); return r; };
     }
     var tg = document.querySelector('.dash-view-toggle');
-    if (tg) tg.addEventListener('click', function (e) { if (e.target.closest('#btnModeLanes,#btnModeCards')) SM.hideLayout(); }, true);
+    if (tg) tg.addEventListener('click', function (e) { if (e.target.closest('#btnModeCards')) SM.hideLayout(); }, true);
     [].forEach.call(document.querySelectorAll('.dash-filter-btn'), function (b) {
       b.addEventListener('click', function () { SM.setFilter(b.dataset.filter); });
     });
     var si = $('dashSearchInput'); if (si) si.addEventListener('input', function () { SM.setSearch(si.value); });
     var td = window.toggleDashboard;
-    if (typeof td === 'function') window.toggleDashboard = function () { var r = td.apply(this, arguments); var v = $('viewDashboard'); if (v && v.style.display !== 'none') SM.showLayout(); return r; };
+    if (typeof td === 'function') window.toggleDashboard = function () { var r = td.apply(this, arguments); var v = $('viewDashboard'); if (v && v.style.display !== 'none') SM.showLayout('2d'); return r; };
 
     // Atualização: a cada 4s quando visível, ao voltar para a aba, quando outra aba/aparelho grava no localStorage,
     // e sob demanda via window.dispatchEvent(new Event('stagemap:refresh')).
