@@ -3126,6 +3126,7 @@ function entrarNoEmbarque() {
   showScreen('viewScanner');
   sound.speak(restored ? `Conferência do embarque ${embId} retomada.` : `Embarque ${embId} pronto para leitura.`);
 }
+window.entrarNoEmbarque = entrarNoEmbarque;
 
 function trocarEmbarque() {
   if (activeConference.conferidos.size > 0) {

@@ -76,7 +76,6 @@ if (aviaoB64) {
   html = html.replace(/<div class="login-logo-circle">/i, `${loginBanner}\n      <div class="login-logo-circle">`);
 }
 
-// Rodapé com o selo 2030
 if (juntosB64) {
   html = html.replace(
     /DHL Supply Chain • Operational Excellence/i,
@@ -84,12 +83,17 @@ if (juntosB64) {
   );
 }
 
+// Substitui todas as imagens dhl_logo.svg pelo SVG oficial inline para nunca dar imagem quebrada
+html = html.replace(/<img src="dhl_logo\.svg"[^>]*>/gi, dhlSvg);
+
 const stageDataJsPath = path.join(baseDir, 'stage_data.js');
 const stageDataJs = fs.existsSync(stageDataJsPath) ? fs.readFileSync(stageDataJsPath, 'utf8') : '';
 const mqttJsPath = path.join(baseDir, 'mqtt.min.js');
 const mqttJs = fs.existsSync(mqttJsPath) ? fs.readFileSync(mqttJsPath, 'utf8') : '';
+const xlsxJsPath = path.join(baseDir, 'xlsx.full.min.js');
+const xlsxJs = fs.existsSync(xlsxJsPath) ? fs.readFileSync(xlsxJsPath, 'utf8') : '';
 
-// Garante que o localStorage funcione mesmo em iframes sandbox do SharePoint
+// Garante que o localStorage funcione mesmo em contextos restritos do SharePoint
 const storageGuard = `
 <script id="dhl-storage-guard">
 (function() {
@@ -98,7 +102,7 @@ const storageGuard = `
     window.localStorage.setItem(k, k);
     window.localStorage.removeItem(k);
   } catch(e) {
-    console.warn('[SPFx Storage Guard] localStorage bloqueado pelo SharePoint/iframe, ativando fallback em memória.');
+    console.warn('[SPFx Storage Guard] localStorage restrito, ativando fallback seguro em memória.');
     var _mem = {};
     try {
       Object.defineProperty(window, 'localStorage', {
@@ -118,29 +122,32 @@ const storageGuard = `
 })();
 </script>
 `;
-html = html.replace(/<head>/i, `<head>\n${storageGuard}`);
+html = html.replace(/<head>/i, () => `<head>\n${storageGuard}`);
 
 // Injeta MQTT inline e remove fallbacks com document.write de CDN externo
 if (mqttJs) {
-  html = html.replace(/<script src="mqtt\.min\.js"><\/script>/i, `<script>\n${mqttJs}\n</script>`);
+  html = html.replace(/<script src="mqtt\.min\.js"><\/script>/i, () => `<script>\n${mqttJs}\n</script>`);
 }
 html = html.replace(/<script>if \(typeof mqtt === 'undefined'\)[\s\S]*?<\/script>/i, '');
 
-// XLSX via CDN oficial Cloudflare (permitida pela CSP da DHL)
-html = html.replace(/<script src="xlsx\.full\.min\.js"><\/script>/i, `<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>`);
+// Injeta XLSX 100% inline (sem depender de conexões com CDNs externas)
+if (xlsxJs) {
+  html = html.replace(/<script src="xlsx\.full\.min\.js"><\/script>/i, () => `<script>\n${xlsxJs}\n</script>`);
+} else {
+  html = html.replace(/<script src="xlsx\.full\.min\.js"><\/script>/i, () => `<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>`);
+}
 
 // Injeta stage_data.js (base embutida) diretamente para carregamento instantâneo
 if (stageDataJs) {
-  html = html.replace(/<script>[\s\S]*?stage_data\.js[\s\S]*?<\/script>/i, `<script>\n${stageDataJs}\n</script>`);
-  html = html.replace(/<script src="stage_data\.js[^"]*"><\/script>/i, `<script>\n${stageDataJs}\n</script>`);
+  html = html.replace(/<script src="stage_data\.js[^"]*"><\/script>/i, () => `<script>\n${stageDataJs}\n</script>`);
 }
 
-// Substitui TODOS os scripts da aplicação por scripts inline (usando regex tolerante a query string)
-html = html.replace(/<script src="consolidation_planner\.js[^"]*"><\/script>/i, `<script>\n${consolidationJs}\n</script>`);
-html = html.replace(/<script src="app\.js[^"]*"><\/script>/i, `<script>\n${appJs}\n</script>`);
-html = html.replace(/<script src="stage_map\.js[^"]*"><\/script>/i, `<script>\n${stageMapJs}\n</script>`);
-html = html.replace(/<script src="powerbi_sync\.js[^"]*"><\/script>/i, `<script>\n${powerBiSyncJs}\n</script>`);
-html = html.replace(/<script src="sync\.js[^"]*"><\/script>/i, `<script>\n${syncJs}\n</script>`);
+// Substitui TODOS os scripts da aplicação por scripts inline (usando função callback para evitar corrupção por tokens $)
+html = html.replace(/<script src="consolidation_planner\.js[^"]*"><\/script>/i, () => `<script>\n${consolidationJs}\n</script>`);
+html = html.replace(/<script src="app\.js[^"]*"><\/script>/i, () => `<script>\n${appJs}\n</script>`);
+html = html.replace(/<script src="stage_map\.js[^"]*"><\/script>/i, () => `<script>\n${stageMapJs}\n</script>`);
+html = html.replace(/<script src="powerbi_sync\.js[^"]*"><\/script>/i, () => `<script>\n${powerBiSyncJs}\n</script>`);
+html = html.replace(/<script src="sync\.js[^"]*"><\/script>/i, () => `<script>\n${syncJs}\n</script>`);
 
 const outPath = path.join(__dirname, 'conferencia_bundle.html');
 fs.writeFileSync(outPath, html, 'utf8');
