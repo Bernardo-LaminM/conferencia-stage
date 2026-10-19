@@ -1393,6 +1393,8 @@ function showScreen(screenId) {
   if (viewDash) viewDash.style.display = (screenId === 'viewDashboard') ? 'block' : 'none';
   const viewCons = document.getElementById('viewConsolidacao');
   if (viewCons) viewCons.style.display = (screenId === 'viewConsolidacao') ? 'flex' : 'none';
+  const viewAnalytics = document.getElementById('viewAnalyticsDashboard');
+  if (viewAnalytics) viewAnalytics.style.display = (screenId === 'viewAnalyticsDashboard') ? 'block' : 'none';
 
   const isConfScreen = (screenId === 'viewLogin' || screenId === 'viewScanner');
   const btnConf = document.getElementById('btnNavConferencia');
@@ -1426,6 +1428,14 @@ function showScreen(screenId) {
     btnCons.style.background = (screenId === 'viewConsolidacao') ? '#0F172A' : '';
     btnCons.style.color = (screenId === 'viewConsolidacao') ? '#FFFFFF' : '';
     btnCons.style.borderColor = (screenId === 'viewConsolidacao') ? '#0F172A' : '';
+  }
+
+  // Botão de Analytics Dashboard na navbar
+  const btnAnalytics = document.getElementById('btnNavAnalytics');
+  if (btnAnalytics) {
+    btnAnalytics.style.background = (screenId === 'viewAnalyticsDashboard') ? '#0F172A' : '';
+    btnAnalytics.style.color = (screenId === 'viewAnalyticsDashboard') ? '#FFFFFF' : '';
+    btnAnalytics.style.borderColor = (screenId === 'viewAnalyticsDashboard') ? '#0F172A' : '';
   }
 
   if (screenId === 'viewLogin') {

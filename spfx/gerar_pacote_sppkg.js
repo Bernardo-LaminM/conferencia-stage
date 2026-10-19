@@ -19,7 +19,7 @@ if (!fs.existsSync(solutionDir)) fs.mkdirSync(solutionDir, { recursive: true });
 const FEATURE_ID = 'c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12';
 const PRODUCT_ID = '9e7c3b21-4f8a-4932-a567-8b1c2d3e4f50';
 const ASSETS_FEATURE_ID = 'f16e9e70-88b2-47c6-bb39-977f5e2337c7';
-const COMPONENT_VERSION = '1.0.0.26';
+const COMPONENT_VERSION = '1.0.0.27';
 const JS_BUNDLE_NAME = `conferencia-stage-web-part_${COMPONENT_VERSION}.js`;
 
 // Subpasta da Feature para o elemento WebPart
@@ -192,6 +192,7 @@ const bodyHtmlWithoutScripts = sanitizeInlineEventAttrs(fullBody.replace(/<scrip
 const baseDir = path.join(spfxDir, '..');
 const stageDataJs = fs.existsSync(path.join(baseDir, 'stage_data.js')) ? fs.readFileSync(path.join(baseDir, 'stage_data.js'), 'utf8') : '';
 const databaseStorageJs = fs.existsSync(path.join(baseDir, 'database_storage.js')) ? fs.readFileSync(path.join(baseDir, 'database_storage.js'), 'utf8') : '';
+const dashboardAnalyticsJs = fs.existsSync(path.join(baseDir, 'dashboard_analytics.js')) ? sanitizeInlineEventAttrs(fs.readFileSync(path.join(baseDir, 'dashboard_analytics.js'), 'utf8')) : '';
 const consolidationJs = fs.existsSync(path.join(baseDir, 'consolidation_planner.js')) ? sanitizeInlineEventAttrs(fs.readFileSync(path.join(baseDir, 'consolidation_planner.js'), 'utf8')) : '';
 const appJs = fs.existsSync(path.join(baseDir, 'app.js')) ? sanitizeInlineEventAttrs(fs.readFileSync(path.join(baseDir, 'app.js'), 'utf8')) : '';
 const stageMapJs = fs.existsSync(path.join(baseDir, 'stage_map.js')) ? fs.readFileSync(path.join(baseDir, 'stage_map.js'), 'utf8') : '';
@@ -421,6 +422,9 @@ define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@mi
         try {
           ${databaseStorageJs}
         } catch(e) { console.warn('[SPFx Native] DatabaseStorage:', e); }
+        try {
+          ${dashboardAnalyticsJs}
+        } catch(e) { console.warn('[SPFx Native] DashboardAnalytics:', e); }
         try {
           ${consolidationJs}
         } catch(e) { console.warn('[SPFx Native] Consolidation:', e); }

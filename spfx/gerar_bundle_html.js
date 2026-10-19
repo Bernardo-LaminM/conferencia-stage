@@ -8,6 +8,7 @@ const stageMapCssPath = path.join(baseDir, 'stage_map.css');
 const dhlBrandingCssPath = path.join(baseDir, 'dhl_branding.css');
 
 const databaseStorageJsPath = path.join(baseDir, 'database_storage.js');
+const dashboardAnalyticsJsPath = path.join(baseDir, 'dashboard_analytics.js');
 const consolidationJsPath = path.join(baseDir, 'consolidation_planner.js');
 const stageMapJsPath = path.join(baseDir, 'stage_map.js');
 const appJsPath = path.join(baseDir, 'app.js');
@@ -20,6 +21,7 @@ const stageMapCss = fs.readFileSync(stageMapCssPath, 'utf8');
 const dhlBrandingCss = fs.existsSync(dhlBrandingCssPath) ? fs.readFileSync(dhlBrandingCssPath, 'utf8') : '';
 
 const databaseStorageJs = fs.existsSync(databaseStorageJsPath) ? fs.readFileSync(databaseStorageJsPath, 'utf8') : '';
+const dashboardAnalyticsJs = fs.existsSync(dashboardAnalyticsJsPath) ? fs.readFileSync(dashboardAnalyticsJsPath, 'utf8') : '';
 const consolidationJs = fs.existsSync(consolidationJsPath) ? fs.readFileSync(consolidationJsPath, 'utf8') : '';
 const stageMapJs = fs.existsSync(stageMapJsPath) ? fs.readFileSync(stageMapJsPath, 'utf8') : '';
 const appJs = fs.existsSync(appJsPath) ? fs.readFileSync(appJsPath, 'utf8') : '';
@@ -140,6 +142,7 @@ if (stageDataJs) {
 
 // Substitui TODOS os scripts da aplicação por scripts inline (usando função callback para evitar corrupção por tokens $)
 html = html.replace(/<script src="database_storage\.js[^"]*"><\/script>/i, () => `<script>\n${databaseStorageJs}\n</script>`);
+html = html.replace(/<script src="dashboard_analytics\.js[^"]*"><\/script>/i, () => `<script>\n${dashboardAnalyticsJs}\n</script>`);
 html = html.replace(/<script src="consolidation_planner\.js[^"]*"><\/script>/i, () => `<script>\n${consolidationJs}\n</script>`);
 html = html.replace(/<script src="app\.js[^"]*"><\/script>/i, () => `<script>\n${appJs}\n</script>`);
 html = html.replace(/<script src="stage_map\.js[^"]*"><\/script>/i, () => `<script>\n${stageMapJs}\n</script>`);

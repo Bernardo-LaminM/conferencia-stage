@@ -490,6 +490,28 @@
     if (modal) modal.style.display = 'none';
   };
 
+  const POWERBI_REPORT_URL = "https://app.powerbi.com/groups/me/reports/3cf5dcbd-f996-4d3e-afd5-564fbf1a6761/9d415a94aa4fce655114?ctid=3596192b-fdf5-4e2c-a6fa-acb706c963d8&experience=power-bi";
+  const POWERBI_EMBED_URL = "https://app.powerbi.com/reportEmbed?reportId=3cf5dcbd-f996-4d3e-afd5-564fbf1a6761&autoAuth=true&ctid=3596192b-fdf5-4e2c-a6fa-acb706c963d8";
+
+  window.POWERBI_REPORT_URL = POWERBI_REPORT_URL;
+  window.POWERBI_EMBED_URL = POWERBI_EMBED_URL;
+
+  window.abrirModalPowerBiIframe = function () {
+    const modal = document.getElementById('modalPowerBiIframe');
+    const iframe = document.getElementById('iframePowerBi');
+    if (modal && iframe) {
+      if (!iframe.src || iframe.src === 'about:blank' || iframe.src === window.location.href) {
+        iframe.src = POWERBI_EMBED_URL;
+      }
+      modal.style.display = 'flex';
+    }
+  };
+
+  window.fecharModalPowerBiIframe = function () {
+    const modal = document.getElementById('modalPowerBiIframe');
+    if (modal) modal.style.display = 'none';
+  };
+
   window.salvarConfigPowerBi = function () {
     const cfg = getConfig();
     const val = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };

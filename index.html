@@ -35,8 +35,14 @@
       <button id="btnUploadModal" class="btn-icon-nav" title="Importar / Atualizar Planilha Excel (.xlsx)" onclick="openUploadModal()">
         Atualizar Base
       </button>
+      <button id="btnNavAnalytics" class="btn-icon-nav" title="Dashboard Operacional & Oportunidades (Dias, Horários, Usuários, Embarques, Docas, Stages)" onclick="abrirAnalyticsDashboard()">
+        📈 Dashboard
+      </button>
       <button id="btnPowerBiModal" class="btn-icon-nav" title="Sincronização Direta via API Live do Power BI" onclick="openPowerBiModal()">
         Power BI
+      </button>
+      <button id="btnNavPbiWeb" class="btn-icon-nav" style="border-color:#BFDBFE; color:#003DA5; background:rgba(0,61,165,0.06); font-weight:700;" title="Abrir Relatório AD HOC 80 Oficial no Power BI (Visualizar / Exportar)" onclick="abrirModalPowerBiIframe()">
+        📊 Power BI Web
       </button>
       <button id="btnVerHistorico" class="btn-icon-nav" title="Histórico da Ferramenta" onclick="openHistoryModal('conf')">
         Histórico (<span id="navHistCount">0</span>)
@@ -555,6 +561,13 @@
   </main>
 
   <!-- =========================================================
+       TELA 5: DASHBOARD ANALÍTICO DE OPERAÇÕES & OPORTUNIDADES
+       ========================================================= -->
+  <main id="viewAnalyticsDashboard" class="main-wrapper" style="display: none; padding-bottom: 60px;">
+    <div id="analyticsDashboardRoot"></div>
+  </main>
+
+  <!-- =========================================================
        MODAL 0: DETALHES E INSPEÇÃO DE VAGAS DO STAGE
        ========================================================= -->
   <div id="modalStageDetail" class="modal-backdrop" style="display: none;">
@@ -864,14 +877,34 @@
         </div>
       </details>
 
-      <!-- Opção Rápida via Power BI Live API (Code) -->
-      <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 12px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-        <div>
-          <div style="font-size: 0.85rem; font-weight: 800; color: #1E40AF;">⚡ Power BI Live API (Modelo AD HOC 80)</div>
-          <div style="font-size: 0.75rem; color: #2563EB;">Consulta direta via DAX sem arquivos intermediários (100% Code)</div>
+      <!-- Opção Power BI Relatório Oficial Web (Link Direto & Embed) -->
+      <div style="background: #EFF6FF; border: 1.5px solid #3B82F6; border-radius: 8px; padding: 14px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div style="flex: 1; min-width: 260px;">
+          <div style="font-size: 0.9rem; font-weight: 800; color: #1E40AF; display: flex; align-items: center; gap: 6px;">
+            <span>📊</span> Relatório Oficial AD HOC 80 (Power BI Web)
+          </div>
+          <div style="font-size: 0.77rem; color: #1D4ED8; margin-top: 3px; line-height: 1.4;">
+            Abra diretamente para exportar os dados atualizados (<b>"..." &gt; Exportar dados &gt; Excel .xlsx</b>) ou visualize na ferramenta:
+          </div>
         </div>
-        <button type="button" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 16px; background: #003DA5;" onclick="openPowerBiModal()">
-          ⚡ Abrir Power BI API
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-secondary-clean" style="margin: 0; background: #FFF; color: #003DA5; border-color: #93C5FD; font-weight: 700;" onclick="abrirModalPowerBiIframe()">
+            🖥️ Abrir Aqui
+          </button>
+          <a href="https://app.powerbi.com/groups/me/reports/3cf5dcbd-f996-4d3e-afd5-564fbf1a6761/9d415a94aa4fce655114?ctid=3596192b-fdf5-4e2c-a6fa-acb706c963d8&amp;experience=power-bi" target="_blank" rel="noopener noreferrer" class="btn-clean-primary" style="margin-top: 0; width: auto; padding: 8px 16px; background: #003DA5; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 800;">
+            🔗 Abrir no Power BI ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- Opção Rápida via Power BI Live API (Code) -->
+      <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-top: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <div style="font-size: 0.85rem; font-weight: 800; color: #334155;">⚡ Power BI Live API (DAX On-Time)</div>
+          <div style="font-size: 0.75rem; color: #64748B;">Consulta direta via DAX sem arquivos intermediários (100% Code)</div>
+        </div>
+        <button type="button" class="btn-secondary-clean" style="margin-top: 0; width: auto; padding: 8px 16px; font-weight: 700;" onclick="openPowerBiModal()">
+          ⚡ Configurar API Live
         </button>
       </div>
 
@@ -1126,6 +1159,42 @@
     </div>
   </div>
 
+  <!-- =========================================================
+       MODAL 6: VISUALIZADOR EMBED DO POWER BI AD HOC 80
+       ========================================================= -->
+  <div id="modalPowerBiIframe" class="modal-backdrop" style="display: none;">
+    <div class="modal-clean-box" style="max-width: 95vw; width: 1240px; height: 90vh; display: flex; flex-direction: column; padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.5rem;">📊</span>
+          <div>
+            <h2 style="font-size: 1.15rem; font-weight: 800; color: #003DA5; margin: 0;">AD HOC 80 — Power BI Oficial CD Itatiaia</h2>
+            <span style="font-size: 0.76rem; color: #64748B;">Relatório oficial de alocação de paletes e embarques da view WMS</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <a href="https://app.powerbi.com/groups/me/reports/3cf5dcbd-f996-4d3e-afd5-564fbf1a6761/9d415a94aa4fce655114?ctid=3596192b-fdf5-4e2c-a6fa-acb706c963d8&amp;experience=power-bi" target="_blank" rel="noopener noreferrer" class="btn-clean-primary" style="margin: 0; width: auto; padding: 6px 14px; background: #003DA5; font-size: 0.8rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 700;">
+            🔗 Abrir em Nova Guia ↗
+          </a>
+          <button type="button" class="btn-close-x" onclick="fecharModalPowerBiIframe()">&times;</button>
+        </div>
+      </div>
+
+      <div style="flex: 1; position: relative; border-radius: 8px; overflow: hidden; background: #0F172A; min-height: 400px; border: 1px solid #CBD5E1;">
+        <iframe id="iframePowerBi" src="" style="width: 100%; height: 100%; border: none;" allowfullscreen="true"></iframe>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 0.78rem; color: #64748B; flex-wrap: wrap; gap: 8px;">
+        <div>
+          💡 <b>Para extrair os dados atualizados:</b> No Power BI, clique com o botão direito na tabela de dados &gt; <b>Exportar dados</b> &gt; selecione <b>"Dados com layout atual"</b> ou <b>".xlsx (Excel 150.000 linhas)"</b>. Depois, arraste o arquivo na opção <i>"Atualizar Base"</i>.
+        </div>
+        <button type="button" class="btn-clean-primary" style="margin: 0; width: auto; padding: 6px 18px;" onclick="fecharModalPowerBiIframe()">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Flutuante -->
   <div id="toastNotification" class="toast-box"></div>
 
@@ -1134,6 +1203,7 @@
   <script src="xlsx.full.min.js"></script>
   <script src="stage_data.js"></script>
   <script src="database_storage.js"></script>
+  <script src="dashboard_analytics.js"></script>
   <script src="consolidation_planner.js"></script>
   <script src="app.js"></script>
   <script src="stage_map.js"></script>
