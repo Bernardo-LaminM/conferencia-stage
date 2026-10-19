@@ -1,5 +1,5 @@
-/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.28 */
-define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.28", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
+/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.29 */
+define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.29", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
   var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
       extendStatics = Object.setPrototypeOf ||
@@ -7900,7 +7900,7 @@ window.StageMapConsolidacaoAdapter = function() {
   const totalPal = allPaletes.length;
   if (totalPal === 0) return { stages: [], routes: [] };
 
-  // 1. Identificar todos os stages sequenciados envolvidos no embarque
+  // 1. Identificar EXCLUSIVAMENTE os stages REAIS do embarque (ZERO invenção de stages)
   const stageSet = new Set();
   const rawStages = Array.isArray(curEmb.stages) ? curEmb.stages : (curEmb.stages ? String(curEmb.stages).split(/[\s,]+/) : []);
   rawStages.forEach(s => {
@@ -7912,7 +7912,14 @@ window.StageMapConsolidacaoAdapter = function() {
     if (norm) stageSet.add(norm);
   });
 
-  const stagesMinimosNecessarios = Math.max(1, Math.ceil(totalPal / 10));
+  const partialSession = getPartialConferenceSession(curEmb.embarque);
+  const activeSess = (activeConference && activeConference.embarqueId === curEmb.embarque) ? activeConference : null;
+
+  if (activeSess && activeSess.currentPhysicalStage) {
+    const norm = normalizeStageName(activeSess.currentPhysicalStage);
+    if (norm) stageSet.add(norm);
+  }
+
   let stagesList = Array.from(stageSet).sort((a, b) => {
     const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
     const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
@@ -7920,45 +7927,20 @@ window.StageMapConsolidacaoAdapter = function() {
   });
 
   if (stagesList.length === 0) {
-    stagesList = ['SO015'];
+    stagesList = ['SO01'];
   }
 
-  // Expande para os stages sequenciados do embarque
-  const firstNum = parseInt(stagesList[0].replace(/\D/g, ''), 10) || 15;
-  const targetStagesCount = Math.max(stagesList.length, stagesMinimosNecessarios + (totalPal > 15 ? 2 : 1));
-  for (let i = 0; i < targetStagesCount; i++) {
-    const stgCode = 'SO' + String(firstNum + i).padStart(3, '0');
-    if (!stagesList.includes(stgCode)) {
-      stagesList.push(stgCode);
-    }
-  }
-
-  // Ordena em ordem decrescente: o menor stage (1) começa pela DIREITA!
-  stagesList.sort((a, b) => {
-    const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-    const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-    return numB - numA;
-  });
-
-  // 2. Mapear paletes reais distribuídos nos stages
-  const partialSession = getPartialConferenceSession(curEmb.embarque);
-  const activeSess = (activeConference && activeConference.embarqueId === curEmb.embarque) ? activeConference : null;
-
+  // 2. Mapear paletes reais distribuídos estritamente nos seus stages reais da base
   const stagePalletsMap = {};
   stagesList.forEach(s => stagePalletsMap[s] = []);
 
-  // Distribuir paletes de forma realística respeitando o limite físico de vagas por stage (máx 8 por stage para haver vagas de manobra)
-  const maxPalletsPerStage = 8;
-  allPaletes.forEach((p, idx) => {
-    let targetStage = normalizeStageName(p.stage);
-    if (!targetStage || !stagePalletsMap[targetStage] || stagePalletsMap[targetStage].length >= maxPalletsPerStage) {
-      // Prioriza alocar a partir do stage mais à direita (menor numeração) e transborda para a esquerda
-      targetStage = stagesList.slice().reverse().find(s => stagePalletsMap[s].length < maxPalletsPerStage) || stagesList[0];
-    }
+  allPaletes.forEach(p => {
+    const norm = normalizeStageName(p.stage);
+    const targetStage = (norm && stagePalletsMap[norm]) ? norm : stagesList[0];
     stagePalletsMap[targetStage].push(p);
   });
 
-  // 3. Montar a estrutura de stages e slots para o mapa e planejador
+  // 3. Montar a estrutura de stages e slots (100% REAL: sem status simulados)
   const stagesData = stagesList.map(stgCode => {
     const isBlk = (typeof window.isStageBlocked === 'function' && window.isStageBlocked(stgCode)) || false;
     const palletsInThis = stagePalletsMap[stgCode] || [];
@@ -7982,8 +7964,8 @@ window.StageMapConsolidacaoAdapter = function() {
           status: 'conferido',
           lpn: sessSlot.lpn || (pal ? pal.palete : ''),
           sku: sessSlot.sku || (pal ? pal.sku_resumo : ''),
-          lote: sessSlot.lote || '',
-          qtd: sessSlot.qtd || 30,
+          lote: sessSlot.lote || (pal ? pal.lote : ''),
+          qtd: sessSlot.qtd || (pal ? pal.qtd_total : 30),
           cap: 40,
           duplado: isDup,
           fracionado: isFrac,
@@ -7997,7 +7979,7 @@ window.StageMapConsolidacaoAdapter = function() {
           status: 'divergencia',
           lpn: sessSlot.lpn || (pal ? pal.palete : ''),
           sku: sessSlot.sku || (pal ? pal.sku_resumo : ''),
-          lote: sessSlot.lote || '',
+          lote: sessSlot.lote || (pal ? pal.lote : ''),
           qtd: sessSlot.qtd || 30,
           cap: 40
         };
@@ -8011,10 +7993,10 @@ window.StageMapConsolidacaoAdapter = function() {
         const capReal = Math.max(40, qtdReal);
         return {
           pos: posLetter,
-          status: hasDiv ? 'divergencia' : (isConf ? 'conferido' : ((pIdx % 4 === 1) ? 'divergencia' : 'conferido')),
+          status: hasDiv ? 'divergencia' : (isConf ? 'conferido' : 'aguardando'),
           lpn: pal.palete,
           sku: firstItem.sku || pal.sku_resumo || 'SKU',
-          lote: firstItem.lote || '',
+          lote: firstItem.lote || pal.lote || '',
           qtd: qtdReal,
           cap: capReal
         };
@@ -8023,11 +8005,14 @@ window.StageMapConsolidacaoAdapter = function() {
       return { pos: posLetter, status: 'livre' };
     });
 
+    const excedenteCount = Math.max(0, palletsInThis.length - 10);
+
     return {
       id: stgCode,
-      band: 0, // Sem grupos: um ao lado do outro sequenciado mesmo
+      band: 0,
       embarque: String(curEmb.embarque),
       isBlocked: isBlk,
+      excedente: excedenteCount,
       slots: slots
     };
   });
