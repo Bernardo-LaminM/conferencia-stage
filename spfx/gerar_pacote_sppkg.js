@@ -19,7 +19,7 @@ if (!fs.existsSync(solutionDir)) fs.mkdirSync(solutionDir, { recursive: true });
 const FEATURE_ID = 'c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12';
 const PRODUCT_ID = '9e7c3b21-4f8a-4932-a567-8b1c2d3e4f50';
 const ASSETS_FEATURE_ID = 'f16e9e70-88b2-47c6-bb39-977f5e2337c7';
-const COMPONENT_VERSION = '1.0.0.27';
+const COMPONENT_VERSION = '1.0.0.28';
 const JS_BUNDLE_NAME = `conferencia-stage-web-part_${COMPONENT_VERSION}.js`;
 
 // Subpasta da Feature para o elemento WebPart
