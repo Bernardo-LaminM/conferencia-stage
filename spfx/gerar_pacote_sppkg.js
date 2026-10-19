@@ -19,7 +19,7 @@ if (!fs.existsSync(solutionDir)) fs.mkdirSync(solutionDir, { recursive: true });
 const FEATURE_ID = 'c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12';
 const PRODUCT_ID = '9e7c3b21-4f8a-4932-a567-8b1c2d3e4f50';
 const ASSETS_FEATURE_ID = 'f16e9e70-88b2-47c6-bb39-977f5e2337c7';
-const COMPONENT_VERSION = '1.0.0.13';
+const COMPONENT_VERSION = '1.0.0.14';
 const JS_BUNDLE_NAME = `conferencia-stage-web-part_${COMPONENT_VERSION}.js`;
 
 // Subpasta da Feature para o elemento WebPart
@@ -316,29 +316,13 @@ define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@mi
       this._removeSharePointPadding();
       this._injectGlobalBreakoutStyles();
 
-      var appHtml = ${JSON.stringify(bundleHtmlContent)};
+      var prodUrl = "https://bernardo-laminm.github.io/conferencia-stage/index.html?v=" + Date.now();
 
       this.domElement.innerHTML = [
-        '<div class="elb-container" style="width: 100%; min-height: 100vh; margin: 0; padding: 0; overflow: visible;">',
-        '  <iframe id="dhlStageFrame" style="width: 100%; height: 100vh; min-height: 100vh; border: none; display: block; background: #f8fafc;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allow="camera; microphone; geolocation" loading="eager"></iframe>',
+        '<div class="elb-container" style="width: 100%; min-height: 92vh; margin: 0; padding: 0; overflow: visible;">',
+        '  <iframe id="dhlStageFrame" src="' + prodUrl + '" style="width: 100%; height: 92vh; min-height: 92vh; border: none; display: block; background: #f8fafc;" allow="camera; microphone; geolocation" loading="eager"></iframe>',
         '</div>'
       ].join('');
-
-      var frame = this.domElement.querySelector('#dhlStageFrame');
-      if (frame && appHtml) {
-        try {
-          frame.srcdoc = appHtml;
-        } catch(e) {
-          console.warn('[SPFx WebPart] srcdoc restrito, usando frame document:', e);
-          try {
-            var fDoc = frame.contentWindow || frame.contentDocument;
-            if (fDoc.document) fDoc = fDoc.document;
-            fDoc.open();
-            fDoc.write(appHtml);
-            fDoc.close();
-          } catch(e2) {}
-        }
-      }
     };
 
 

@@ -1,2 +1,2 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Feature xmlns="http://schemas.microsoft.com/sharepoint/" Title="Client Side Assets" Description="A feature that help deploy client side component assets to SharePoint Online." Id="f16e9e70-88b2-47c6-bb39-977f5e2337c7" Version="1.0.0.13" Scope="Web" Hidden="FALSE" />
+<Feature xmlns="http://schemas.microsoft.com/sharepoint/" Title="Client Side Assets" Description="A feature that help deploy client side component assets to SharePoint Online." Id="f16e9e70-88b2-47c6-bb39-977f5e2337c7" Version="1.0.0.14" Scope="Web" Hidden="FALSE" />
