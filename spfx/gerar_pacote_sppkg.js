@@ -19,7 +19,7 @@ if (!fs.existsSync(solutionDir)) fs.mkdirSync(solutionDir, { recursive: true });
 const FEATURE_ID = 'c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12';
 const PRODUCT_ID = '9e7c3b21-4f8a-4932-a567-8b1c2d3e4f50';
 const ASSETS_FEATURE_ID = 'f16e9e70-88b2-47c6-bb39-977f5e2337c7';
-const COMPONENT_VERSION = '1.0.0.14';
+const COMPONENT_VERSION = '1.0.0.15';
 const JS_BUNDLE_NAME = `conferencia-stage-web-part_${COMPONENT_VERSION}.js`;
 
 // Subpasta da Feature para o elemento WebPart
@@ -176,8 +176,30 @@ const scopedCssContent = fs.existsSync(scopedCssFile) ? fs.readFileSync(scopedCs
 const bundleHtmlFile = path.join(spfxDir, 'conferencia_bundle.html');
 const bundleHtmlContent = fs.existsSync(bundleHtmlFile) ? fs.readFileSync(bundleHtmlFile, 'utf8') : '';
 
-// 12. ClientSideAssets/conferencia-stage-web-part_1.0.0.4.js (Módulo AMD SPFx Autocontido com srcdoc)
-const bundleJs = `/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Autocontido v${COMPONENT_VERSION} */
+// Extrai styles da aplicação
+const styleMatches = bundleHtmlContent.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
+const combinedStylesContent = styleMatches.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');
+
+// Extrai o HTML do body sem as tags de script
+const bodyStart = bundleHtmlContent.indexOf('<body');
+const bodyContentStart = bundleHtmlContent.indexOf('>', bodyStart) + 1;
+const bodyEnd = bundleHtmlContent.lastIndexOf('</body>');
+const fullBody = bundleHtmlContent.slice(bodyContentStart, bodyEnd);
+const bodyHtmlWithoutScripts = fullBody.replace(/<script[\s\S]*?<\/script>/gi, '');
+
+// Lê os módulos de script originais
+const baseDir = path.join(spfxDir, '..');
+const stageDataJs = fs.existsSync(path.join(baseDir, 'stage_data.js')) ? fs.readFileSync(path.join(baseDir, 'stage_data.js'), 'utf8') : '';
+const consolidationJs = fs.existsSync(path.join(baseDir, 'consolidation_planner.js')) ? fs.readFileSync(path.join(baseDir, 'consolidation_planner.js'), 'utf8') : '';
+const appJs = fs.existsSync(path.join(baseDir, 'app.js')) ? fs.readFileSync(path.join(baseDir, 'app.js'), 'utf8') : '';
+const stageMapJs = fs.existsSync(path.join(baseDir, 'stage_map.js')) ? fs.readFileSync(path.join(baseDir, 'stage_map.js'), 'utf8') : '';
+const powerBiSyncJs = fs.existsSync(path.join(baseDir, 'powerbi_sync.js')) ? fs.readFileSync(path.join(baseDir, 'powerbi_sync.js'), 'utf8') : '';
+const syncJs = fs.existsSync(path.join(baseDir, 'sync.js')) ? fs.readFileSync(path.join(baseDir, 'sync.js'), 'utf8') : '';
+const xlsxJs = fs.existsSync(path.join(baseDir, 'xlsx.full.min.js')) ? fs.readFileSync(path.join(baseDir, 'xlsx.full.min.js'), 'utf8') : '';
+const mqttJs = fs.existsSync(path.join(baseDir, 'mqtt.min.js')) ? fs.readFileSync(path.join(baseDir, 'mqtt.min.js'), 'utf8') : '';
+
+// 12. ClientSideAssets/conferencia-stage-web-part_1.0.0.15.js (Módulo AMD SPFx Nativo 100% no DOM)
+const bundleJs = `/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v${COMPONENT_VERSION} */
 define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
   var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
@@ -316,13 +338,55 @@ define("${FEATURE_ID}_${COMPONENT_VERSION}", ["@microsoft/sp-core-library", "@mi
       this._removeSharePointPadding();
       this._injectGlobalBreakoutStyles();
 
-      var prodUrl = "https://bernardo-laminm.github.io/conferencia-stage/index.html?v=" + Date.now();
+      // 1. Injeta os estilos CSS da aplicação no head da página (apenas uma vez)
+      var styleId = 'dhl-stage-native-styles';
+      if (!document.getElementById(styleId)) {
+        var styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        styleEl.textContent = ${JSON.stringify(combinedStylesContent)};
+        document.head.appendChild(styleEl);
+      }
 
+      // 2. Injeta a interface visual HTML da aplicação diretamente no DOM do SharePoint (SEM IFRAME)
       this.domElement.innerHTML = [
-        '<div class="elb-container" style="width: 100%; min-height: 92vh; margin: 0; padding: 0; overflow: visible;">',
-        '  <iframe id="dhlStageFrame" src="' + prodUrl + '" style="width: 100%; height: 92vh; min-height: 92vh; border: none; display: block; background: #f8fafc;" allow="camera; microphone; geolocation" loading="eager"></iframe>',
+        '<div class="elb-container" style="width: 100%; min-height: 90vh; margin: 0; padding: 0;">',
+        ${JSON.stringify(bodyHtmlWithoutScripts)},
         '</div>'
       ].join('');
+
+      // 3. Executa o ecossistema JavaScript nativamente no escopo do SharePoint
+      if (!window.__DHL_STAGE_APP_INITIALIZED__) {
+        window.__DHL_STAGE_APP_INITIALIZED__ = true;
+        try {
+          ${xlsxJs}
+        } catch(e) { console.warn('[SPFx Native] XLSX:', e); }
+        try {
+          ${mqttJs}
+        } catch(e) { console.warn('[SPFx Native] MQTT:', e); }
+        try {
+          ${stageDataJs}
+        } catch(e) { console.warn('[SPFx Native] StageData:', e); }
+        try {
+          ${consolidationJs}
+        } catch(e) { console.warn('[SPFx Native] Consolidation:', e); }
+        try {
+          ${appJs}
+        } catch(e) { console.warn('[SPFx Native] App:', e); }
+        try {
+          ${stageMapJs}
+        } catch(e) { console.warn('[SPFx Native] StageMap:', e); }
+        try {
+          ${powerBiSyncJs}
+        } catch(e) { console.warn('[SPFx Native] PowerBiSync:', e); }
+        try {
+          ${syncJs}
+        } catch(e) { console.warn('[SPFx Native] Sync:', e); }
+      }
+
+      // 4. Inicializa os dados e vincula todos os botões e formulários do DOM
+      if (typeof window.initApp === 'function') {
+        try { window.initApp(); } catch(e) { console.warn('[SPFx Native] initApp:', e); }
+      }
     };
 
 

@@ -1,2 +1,2 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Feature xmlns="http://schemas.microsoft.com/sharepoint/" Title="DHL Conferencia Feature" Description="Ativa a WebPart de Conferencia de Stage" Id="c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12" Version="1.0.0.14" Scope="Web" Hidden="FALSE" />
+<Feature xmlns="http://schemas.microsoft.com/sharepoint/" Title="DHL Conferencia Feature" Description="Ativa a WebPart de Conferencia de Stage" Id="c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12" Version="1.0.0.15" Scope="Web" Hidden="FALSE" />
