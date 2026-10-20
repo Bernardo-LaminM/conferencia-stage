@@ -1,5 +1,5 @@
-/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.31 */
-define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.31", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
+/*! DHL Supply Chain - Conferencia de Stage SPFx WebPart Nativo v1.0.0.32 */
+define("c5d7e9a1-2b4f-4d8e-9f1a-7b3c5e8d0a12_1.0.0.32", ["@microsoft/sp-core-library", "@microsoft/sp-webpart-base"], function(spCore, spWebPart) {
   var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
       extendStatics = Object.setPrototypeOf ||
@@ -4035,17 +4035,20 @@ window.getEmbarqueTimestamp = function(emb) {
 
 window.sanitizePartialConferences = function() {
   try {
-    const raw = localStorage.getItem(STORAGE_PARTIAL_CONFERENCES_KEY);
-    if (!raw) return;
-    const partials = JSON.parse(raw);
     const todayStr = new Date().toDateString();
-    let changed = false;
 
-    // Mapeia stage -> embarque oficial da base atual
+    // Mapeia stage -> embarque oficial da base atual (o mais recente daquele stage)
     const stageToEmbarque = new Map();
     if (database && database.embarques) {
-      Object.values(database.embarques).forEach(e => {
-        if (!e || !e.embarque) return;
+      // Ordena embarques por recência para que o mais recente defina o dono do stage
+      const allEmbs = Object.values(database.embarques).filter(e => e && e.embarque);
+      allEmbs.sort((a, b) => {
+        const tA = (typeof window.getEmbarqueTimestamp === 'function') ? window.getEmbarqueTimestamp(a) : 0;
+        const tB = (typeof window.getEmbarqueTimestamp === 'function') ? window.getEmbarqueTimestamp(b) : 0;
+        return tB - tA;
+      });
+
+      allEmbs.forEach(e => {
         const sList = Array.isArray(e.stages) ? e.stages : String(e.stages || '').split(/[\s,]+/);
         sList.forEach(s => {
           const norm = normalizeStageName(s);
@@ -4060,36 +4063,60 @@ window.sanitizePartialConferences = function() {
       });
     }
 
-    Object.keys(partials).forEach(embId => {
-      const sess = partials[embId];
-      if (!sess) return;
-
-      // 1. Se a conferência foi feita em data anterior (ontem ou mais antiga), expira!
-      // "exemplo esse que eu fiz ontem e tiver outro depois, ele considera sempre o mais recente"
-      const sessDate = sess.lastUpdated || sess.iniciadoEm;
-      const isPastDay = sessDate && (new Date(sessDate).toDateString() !== todayStr);
-
-      if (isPastDay) {
-        delete partials[embId];
-        changed = true;
-        return;
-      }
-
-      // 2. Se o stage mudou de embarque na base, remove slots daquele stage (vem ZERADO)
-      if (sess.stageSlots) {
-        Object.keys(sess.stageSlots).forEach(stg => {
+    // 1. Higieniza activeConference (se for de ontem, expira e vem ZERADO automaticamente)
+    if (activeConference) {
+      const acDate = activeConference.iniciadoEm;
+      const isAcPast = acDate && (new Date(acDate).toDateString() !== todayStr);
+      if (isAcPast) {
+        activeConference = null;
+        try { localStorage.removeItem(STORAGE_ACTIVE_SESSION_KEY); } catch(e) {}
+      } else if (activeConference.stageSlots) {
+        Object.keys(activeConference.stageSlots).forEach(stg => {
           const normStg = normalizeStageName(stg);
-          const currentEmbOfStage = stageToEmbarque.get(normStg);
-          if (currentEmbOfStage && currentEmbOfStage !== embId && currentEmbOfStage.replace(/^0+/, '') !== embId.replace(/^0+/, '')) {
-            delete sess.stageSlots[stg];
-            changed = true;
+          const owner = stageToEmbarque.get(normStg);
+          if (owner && owner !== activeConference.embarqueId && owner.replace(/^0+/, '') !== String(activeConference.embarqueId).replace(/^0+/, '')) {
+            delete activeConference.stageSlots[stg];
           }
         });
       }
-    });
+    }
 
-    if (changed) {
-      localStorage.setItem(STORAGE_PARTIAL_CONFERENCES_KEY, JSON.stringify(partials));
+    // 2. Higieniza partials (conferências de ontem expiram automaticamente; se mudou de embarque no stage, zera automaticamente)
+    const raw = localStorage.getItem(STORAGE_PARTIAL_CONFERENCES_KEY);
+    if (raw) {
+      const partials = JSON.parse(raw);
+      let changed = false;
+
+      Object.keys(partials).forEach(embId => {
+        const sess = partials[embId];
+        if (!sess) return;
+
+        // Se a conferência foi feita em data anterior (ontem ou mais antiga), expira automaticamente
+        const sessDate = sess.lastUpdated || sess.iniciadoEm;
+        const isPastDay = sessDate && (new Date(sessDate).toDateString() !== todayStr);
+
+        if (isPastDay) {
+          delete partials[embId];
+          changed = true;
+          return;
+        }
+
+        // Se o stage mudou de embarque na base, remove automaticamente slots daquele stage (vem ZERADO)
+        if (sess.stageSlots) {
+          Object.keys(sess.stageSlots).forEach(stg => {
+            const normStg = normalizeStageName(stg);
+            const currentEmbOfStage = stageToEmbarque.get(normStg);
+            if (currentEmbOfStage && currentEmbOfStage !== embId && currentEmbOfStage.replace(/^0+/, '') !== embId.replace(/^0+/, '')) {
+              delete sess.stageSlots[stg];
+              changed = true;
+            }
+          });
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem(STORAGE_PARTIAL_CONFERENCES_KEY, JSON.stringify(partials));
+      }
     }
   } catch(e) {}
 };
@@ -5070,14 +5097,9 @@ window.openStageDetailModal = function(stageCode, highlightSlot = null, paleteIn
   if (footerInfo) {
     const isStgBlk = window.isStageBlocked && window.isStageBlocked(cleanStageCode);
     footerInfo.innerHTML = `
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <button type="button" class="btn-secondary-clean" data-csp-onclick="closeStageDetailModal(); window.zerarConferenciaStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: #CBD5E1; color: #475569; font-weight: 800; background: #F8FAFC;" title="Limpa qualquer conferência residual deste stage e deixa-o 100% zerado">
-          🔄 Zerar Stage ${cleanStageCode}
-        </button>
-        <button type="button" class="btn-secondary-clean" data-csp-onclick="closeStageDetailModal(); solicitarToggleBloqueioStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: ${isStgBlk ? '#16A34A' : '#EF4444'}; color: ${isStgBlk ? '#15803D' : '#DC2626'}; font-weight: 800; background: ${isStgBlk ? '#F0FDF4' : '#FEF2F2'};">
-          ${isStgBlk ? '🔓 Desbloquear Stage ' + cleanStageCode : '🔒 Bloquear Stage ' + cleanStageCode}
-        </button>
-      </div>
+      <button type="button" class="btn-secondary-clean" data-csp-onclick="closeStageDetailModal(); solicitarToggleBloqueioStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: ${isStgBlk ? '#16A34A' : '#EF4444'}; color: ${isStgBlk ? '#15803D' : '#DC2626'}; font-weight: 800; background: ${isStgBlk ? '#F0FDF4' : '#FEF2F2'};">
+        ${isStgBlk ? '🔓 Desbloquear Stage ' + cleanStageCode : '🔒 Bloquear Stage ' + cleanStageCode}
+      </button>
     `;
   }
 
@@ -8249,9 +8271,27 @@ window.StageMapAdapter = (function () {
           }
           if (!motivo) motivo = 'Divergência apontada na conferência deste palete';
         }
+        // O stage do palete no mapa é estritamente o stage planejado do WMS,
+        // a menos que esteja sendo ATIVAMENTE conferido hoje nesta mesma vaga pelo operador
+        let targetStage = p.stage;
+        const normWmsStage = normalizeStageName(p.stage);
+        if (ph && ph.stage) {
+          const normPh = normalizeStageName(ph.stage);
+          const ownerEmb = stageOwnerMap.get(normPh);
+          if (!ownerEmb || ownerEmb === e.embarque || ownerEmb.replace(/^0+/, '') === String(e.embarque).replace(/^0+/, '')) {
+            targetStage = ph.stage;
+          }
+        } else if (c && c.stageFisico) {
+          const normC = normalizeStageName(c.stageFisico);
+          const ownerEmb = stageOwnerMap.get(normC);
+          if (!ownerEmb || ownerEmb === e.embarque || ownerEmb.replace(/^0+/, '') === String(e.embarque).replace(/^0+/, '')) {
+            targetStage = c.stageFisico;
+          }
+        }
+
         rows.push(rowOf({
           lpn: lpn, embarque: e.embarque,
-          stage: (ph && ph.stage) || (c && (c.stageFisico || c.stage)) || p.stage,
+          stage: targetStage,
           vaga: ph ? ph.slot : (c && c.slot),
           status: div ? 'divergencia' : ok ? 'conferido' : 'aguardando',
           sku: p.sku_resumo, lote: p.itens && p.itens[0] && p.itens[0].lote, qtd: p.qtd_total,
