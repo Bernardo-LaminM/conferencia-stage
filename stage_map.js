@@ -84,7 +84,8 @@
     lote: ['lote', 'lotnum', 'lot', 'batch'],
     qtd: ['qtd', 'quantidade', 'qty', 'untqty', 'caixas', 'volumes', 'qtdcaixas'],
     cap: ['cap', 'capacidade', 'caixaspalete', 'qtdpalete', 'cxpalete'],
-    desc: ['descricao', 'desc', 'description', 'dscmaterial']
+    desc: ['descricao', 'desc', 'description', 'dscmaterial'],
+    motivo: ['motivo', 'motivodivergencia', 'divergenciamotivo', 'detalhes', 'detalhe', 'observacao', 'obs', 'auditnotes', 'erro', 'motivo_divergencia', 'divergencia_motivo']
   };
   function keyMap(o) {
     var m = {}, r = { loc: [] };
@@ -142,7 +143,8 @@
       if (P.indexOf(pos) < 0) pos = null;
       var lpn = km.lpn ? r[km.lpn] : null, st = statusOf(r, km);
       if (hook) { try { var h = hook(lpn, r); if (h && RANK[h]) st = h; } catch (e) { /* ignora */ } }
-      s.items.push({ pos: pos, status: st, lpn: lpn, sku: km.sku ? r[km.sku] : undefined, lote: km.lote ? r[km.lote] : undefined, qtd: km.qtd ? numOr(r[km.qtd]) : undefined, cap: km.cap ? numOr(r[km.cap]) : undefined, desc: km.desc ? r[km.desc] : undefined, emb: km.emb && r[km.emb] != null && r[km.emb] !== '' ? String(r[km.emb]).trim() : (r.__emb != null ? String(r.__emb) : null) });
+      var mot = km.motivo ? r[km.motivo] : (r.motivo || r.detalhes || r.divergencia || '');
+      s.items.push({ pos: pos, status: st, lpn: lpn, sku: km.sku ? r[km.sku] : undefined, lote: km.lote ? r[km.lote] : undefined, qtd: km.qtd ? numOr(r[km.qtd]) : undefined, cap: km.cap ? numOr(r[km.cap]) : undefined, desc: km.desc ? r[km.desc] : undefined, emb: km.emb && r[km.emb] != null && r[km.emb] !== '' ? String(r[km.emb]).trim() : (r.__emb != null ? String(r.__emb) : null), motivo: mot, stageWms: r.stageWms || r.stageSistemico || undefined, stageFisico: r.stageFisico || s.id });
     });
     var stages = Object.keys(map).map(function (id) {
       var s = map[id], by = {}, loose = [], ec = {}, over = 0;
@@ -153,10 +155,12 @@
         else over++;
       });
       var slots = P.filter(function (q) { return by[q]; }).map(function (q) {
-        var g = by[q], f = g[0], x = { pos: q, status: worst(g), lpn: f.lpn, sku: f.sku, lote: f.lote, qtd: f.qtd, cap: f.cap, desc: f.desc };
+        var g = by[q], f = g[0], x = { pos: q, status: worst(g), lpn: f.lpn, sku: f.sku, lote: f.lote, qtd: f.qtd, cap: f.cap, desc: f.desc, motivo: f.motivo, stageWms: f.stageWms, stageFisico: f.stageFisico };
         if (g.length > 1) {
-          x.paletes = g.map(function (y) { return { lpn: y.lpn, status: y.status, sku: y.sku, lote: y.lote, qtd: y.qtd, emb: y.emb }; });
+          x.paletes = g.map(function (y) { return { lpn: y.lpn, status: y.status, sku: y.sku, lote: y.lote, qtd: y.qtd, emb: y.emb, motivo: y.motivo }; });
           x.qtd = g.reduce(function (tot, y) { return tot + (+y.qtd || 0); }, 0);
+          var divItem = g.find(function(y) { return y.status === 'divergencia' && y.motivo; });
+          if (divItem) x.motivo = divItem.motivo;
         }
         return x;
       });
@@ -718,21 +722,41 @@
     var p = ev.target.closest('.sm-pal'), pl = !p && ev.target.closest('.sm-plate'), html;
     if (p) {
       var s = stageById(p.dataset.s) || {}, x = (s.slots || []).filter(function (q) { return q.pos === p.dataset.p; })[0] || {}, blk = blocked(s);
-      var stack = x.paletes && x.paletes.length > 1 ? x.paletes.map(function (y, i) { return row('Nível ' + (i + 1), esc(y.lpn) + (y.status && y.status !== x.status ? ' · ' + esc(NAMES[y.status] || y.status) : '')); }).join('') : '';
+      var divDesc = '';
+      if (x.status === 'divergencia' || blk) {
+        divDesc = x.motivo || (typeof window.getDivergenceDescription === 'function' ? window.getDivergenceDescription(x.lpn, s.id, p.dataset.p, s.embarque) : '') || (blk ? 'Stage bloqueado pela liderança operacional' : 'Divergência detectada durante a conferência');
+      }
+      var stack = x.paletes && x.paletes.length > 1 ? x.paletes.map(function (y, i) {
+        var motY = y.status === 'divergencia' ? (y.motivo || divDesc) : '';
+        return row('Nível ' + (i + 1), esc(y.lpn) + (y.status && y.status !== x.status ? ' · ' + esc(NAMES[y.status] || y.status) : '') + (motY ? ' <small style="color:#ef4444;font-weight:700;">(' + esc(motY) + ')</small>' : ''));
+      }).join('') : '';
+
+      var divAlertHtml = '';
+      if (x.status === 'divergencia') {
+        divAlertHtml = '<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #EF4444;padding:7px 9px;border-radius:4px;margin:6px 0;font-size:11.5px;line-height:1.35;color:#991B1B;">' +
+          '<div style="font-weight:800;display:flex;align-items:center;gap:4px;margin-bottom:2px;">⚠️ DIVERGÊNCIA IDENTIFICADA:</div>' +
+          '<div style="font-weight:500;color:#7F1D1D;">' + esc(divDesc) + '</div>' +
+          '</div>';
+      }
+
       html = '<div class="th"><b>' + esc(s.id) + esc(p.dataset.p) + '</b><span class="tb st-' + esc(x.status) + '">' + esc(NAMES[x.status] || '') + '</span></div>' +
-        (blk ? '<div class="tw">Stage bloqueado</div>' : '') +
+        (blk && x.status !== 'divergencia' ? '<div class="tw">Stage bloqueado</div>' : '') +
+        divAlertHtml +
         (stack ? row('Pilha', x.paletes.length === 2 ? 'Duplado (2 plts)' : 'Fracionado (' + x.paletes.length + ' plts)') + stack : row('LPN', esc(x.lpn))) +
         row('SKU', x.sku ? esc(x.sku) + (x.lote ? ' · ' + esc(x.lote) : '') : '') + row('Descrição', esc(x.desc)) +
         row('Qtd', x.qtd ? x.qtd + (x.cap ? ' / ' + x.cap + ' (' + Math.round(100 * x.qtd / x.cap) + '%)' : '') : '') +
-        row('Embarque', esc(s.embarque)) + '<div class="tf">Clique para ver o stage</div>';
+        (x.stageWms && x.stageWms !== s.id ? row('Stage Previsto WMS', esc(x.stageWms)) : '') +
+        row('Embarque', esc(s.embarque)) + '<div class="tf">Clique para ver o stage e conferir</div>';
     } else if (pl) {
       var st = stageById(pl.dataset.st) || {}, occ = occOf(st), ok = occ.filter(function (x) { return x.status === 'conferido'; }).length, bad = occ.filter(function (x) { return x.status === 'divergencia'; }).length, bk = blocked(st);
+      var embsList = st.embarques && st.embarques.length > 1 ? st.embarques.map(esc).join(', ') : esc(st.embarque);
       html = '<div class="th"><b>Stage ' + esc(st.id) + '</b>' + (bk ? '<span class="tb st-divergencia">Bloqueado</span>' : '') + '</div>' +
-        row('Embarque', st.embarques && st.embarques.length > 1 ? st.embarques.map(esc).join(', ') : esc(st.embarque)) +
+        (bad ? '<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #EF4444;padding:5px 8px;border-radius:4px;font-size:11px;margin:4px 0;font-weight:700;color:#991B1B;">⚠️ ' + bad + ' vaga(s) com divergência neste stage</div>' : '') +
+        row(st.embarques && st.embarques.length > 1 ? 'Embarques (' + st.embarques.length + ')' : 'Embarque', embsList) +
         row('Ocupação', occ.length + ' / ' + vagasOf(st).length + ' vagas') +
         (occ.length ? row('Conferidos', ok + ' / ' + occ.length) : '') + (bad ? row('Divergências', bad) : '') +
         (st.excedente ? row('Excedente', st.excedente + ' palete(s) sem vaga') : '') +
-        '<div class="tf">' + (SM.opts.onStage ? '' : typeof window.solicitarToggleBloqueioStage === 'function' ? 'Clique para ' + (bk ? 'DESBLOQUEAR' : 'BLOQUEAR') + ' o stage' : 'Clique para ver detalhes') + '</div>';
+        '<div class="tf">Clique para ver os embarques e conferir</div>';
     } else return hideTip();
     tip.innerHTML = html;
     tip.style.display = 'block';

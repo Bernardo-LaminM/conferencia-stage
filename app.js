@@ -265,6 +265,21 @@ function getStageOccupant(stageCode, excludeEmbarqueId = '') {
 
   const targetCleanEmb = excludeEmbarqueId ? normalizeBarcode(excludeEmbarqueId).replace(/^0+/, '') : '';
 
+  // Se o próprio embarque auditado possui este stage planejado (na lista de stages ou nos paletes), NUNCA é invasão!
+  if (targetCleanEmb) {
+    for (const embId of Object.keys(database.embarques)) {
+      const emb = database.embarques[embId];
+      if (!emb) continue;
+      const currentClean = normalizeBarcode(emb.embarque || embId).replace(/^0+/, '');
+      if (currentClean === targetCleanEmb) {
+        const sList = Array.isArray(emb.stages) ? emb.stages : String(emb.stages || '').split(/[\s,]+/);
+        if (sList.some(s => normalizeStageName(s) === normTarget)) return null;
+        if (emb.paletes && Array.isArray(emb.paletes) && emb.paletes.some(p => p && normalizeStageName(p.stage) === normTarget)) return null;
+        break;
+      }
+    }
+  }
+
   for (const embId of Object.keys(database.embarques)) {
     const emb = database.embarques[embId];
     if (emb.embarque !== embId) continue; // ignora aliases duplicados
@@ -2304,6 +2319,114 @@ window.handleDashSearch = function(val) {
   renderDashboard();
 };
 
+/* =========================================================
+   DIAGNÓSTICO DETALHADO DE DIVERGÊNCIAS (TOOLTIP & AUDITORIA)
+   ========================================================= */
+window.getDivergenceDescription = function(lpn, stageId, pos, embarqueId) {
+  if (!lpn) {
+    if (stageId && window.isStageBlocked && window.isStageBlocked(stageId)) {
+      return 'Stage bloqueado operacionalmente pela liderança';
+    }
+    return 'Posição física com divergência apontada na conferência';
+  }
+
+  // 1. Conferência ativa em tela
+  if (activeConference) {
+    if (activeConference.divergencias && activeConference.divergencias.length > 0) {
+      const div = activeConference.divergencias.find(d => d.paleteId === lpn || (d.alerta && d.alerta.lpn === lpn));
+      if (div) {
+        if (div.detalhes) return div.detalhes;
+        if (div.stageFisico && div.stageSistemico && div.stageFisico !== div.stageSistemico) {
+          return 'Palete alocado no stage ' + div.stageFisico + ', mas planejado no WMS para ' + div.stageSistemico;
+        }
+      }
+    }
+    if (activeConference.stageSlots) {
+      for (const stg of Object.keys(activeConference.stageSlots)) {
+        const slots = activeConference.stageSlots[stg] || {};
+        for (const k of Object.keys(slots)) {
+          const sl = slots[k];
+          if (sl && (sl.palete === lpn || sl.lpn === lpn || (sl.paletes && sl.paletes.some(y => y.lpn === lpn)))) {
+            if (sl.status === 'divergent' || (sl.paletes && sl.paletes.some(y => y.status === 'divergent'))) {
+              return sl.details || sl.auditNotes || sl.motivo || ('Divergência na vaga ' + formatStageSlotDisplay(stg, k));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Conferências parciais gravadas
+  try {
+    const partials = JSON.parse(localStorage.getItem(STORAGE_PARTIAL_CONFERENCES_KEY) || '{}');
+    for (const embKey of Object.keys(partials)) {
+      const pSess = partials[embKey];
+      if (!pSess) continue;
+      if (pSess.divergencias) {
+        const div = pSess.divergencias.find(d => d.paleteId === lpn || (d.alerta && d.alerta.lpn === lpn));
+        if (div && div.detalhes) return div.detalhes;
+      }
+      if (pSess.stageSlots) {
+        for (const stg of Object.keys(pSess.stageSlots)) {
+          const slots = pSess.stageSlots[stg] || {};
+          for (const k of Object.keys(slots)) {
+            const sl = slots[k];
+            if (sl && (sl.palete === lpn || sl.lpn === lpn || (sl.paletes && sl.paletes.some(y => y.lpn === lpn)))) {
+              if (sl.status === 'divergent') {
+                return sl.details || sl.auditNotes || sl.motivo || 'Divergência gravada na sessão anterior';
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch(e) {}
+
+  // 3. Alertas de inventário
+  try {
+    const alerts = JSON.parse(localStorage.getItem('dhl_stage_inventory_alerts_v2') || '[]');
+    const a = alerts.find(al => al.lpn === lpn);
+    if (a) {
+      if (a.embarqueAuditado && a.embarqueCorreto && a.embarqueAuditado !== a.embarqueCorreto) {
+        return 'Palete pertence ao Embarque ' + a.embarqueCorreto + ' (auditado no Embarque ' + a.embarqueAuditado + ')';
+      }
+      if (a.stageFisico && a.stageCorreto && a.stageFisico !== a.stageCorreto) {
+        return 'Alocado em ' + a.stageFisico + ', previsto no WMS para ' + a.stageCorreto;
+      }
+    }
+  } catch(e) {}
+
+  // 4. Stage bloqueado
+  if (stageId && window.isStageBlocked && window.isStageBlocked(stageId)) {
+    return 'Stage bloqueado pela liderança operacional';
+  }
+
+  // 5. Comparação na base de dados
+  if (database && database.embarques) {
+    let found = false, embOwner = null, expStg = null;
+    for (const k of Object.keys(database.embarques)) {
+      const emb = database.embarques[k];
+      if (!emb || !emb.paletes) continue;
+      const pal = emb.paletes.find(p => p && p.palete === lpn);
+      if (pal) {
+        found = true;
+        embOwner = emb.embarque;
+        expStg = pal.stage || (emb.stages && emb.stages[0]);
+        break;
+      }
+    }
+    if (!found) return 'LPN não cadastrada na carga WMS (Material não planejado)';
+    if (stageId && expStg && normalizeStageName(expStg) !== normalizeStageName(stageId)) {
+      return 'Alocado em ' + stageId + ' (Previsto WMS: ' + expStg + ')';
+    }
+    if (embarqueId && embOwner && embOwner !== embarqueId) {
+      return 'LPN pertence ao Embarque ' + embOwner + ' (não ao Embarque ' + embarqueId + ')';
+    }
+  }
+
+  return 'Divergência detectada na conferência';
+};
+
 function getDashboardStageInfo(stageCode) {
   const normStage = normalizeStageName(stageCode);
   const stageNum = parseInt(stageCode.replace(/\D/g, ''), 10) || 0;
@@ -2324,16 +2447,22 @@ function getDashboardStageInfo(stageCode) {
       const firstStg = sList[0] || (e.paletes && e.paletes[0] && e.paletes[0].stage) || '';
       const firstNum = parseInt(String(firstStg).replace(/\D/g, ''), 10) || 0;
 
+      let palletsInStgCount = 0;
+      if (e.paletes && Array.isArray(e.paletes)) {
+        palletsInStgCount = e.paletes.filter(p => p && normalizeStageName(p.stage) === normStage).length;
+      }
       if (directMatch) {
         if (!matchedEmbs.some(m => m.embarque.embarque === e.embarque)) {
-          matchedEmbs.push({ embarque: e, isRamified: false, offset: 0 });
+          matchedEmbs.push({ embarque: e, isRamified: false, offset: 0, palletsInStage: palletsInStgCount || Math.min(10, totalPal) });
         }
       } else if (firstNum > 0 && totalPal > 10) {
         // Acobertamento de stages contíguos de acordo com o volume do embarque
         const stagesNeeded = Math.ceil(totalPal / 10);
         if (stageNum >= firstNum && stageNum < firstNum + stagesNeeded) {
           if (!matchedEmbs.some(m => m.embarque.embarque === e.embarque)) {
-            matchedEmbs.push({ embarque: e, isRamified: true, offset: stageNum - firstNum });
+            const offset = stageNum - firstNum;
+            const remaining = totalPal - (offset * 10);
+            matchedEmbs.push({ embarque: e, isRamified: true, offset: offset, palletsInStage: Math.max(0, Math.min(10, remaining)) });
           }
         }
       }
@@ -2492,7 +2621,8 @@ function getDashboardStageInfo(stageCode) {
     blockedSlots: blockedSlots,
     slots: slots,
     hasDivergence: hasDivergence,
-    alertsCount: hasDivergence ? 1 : 0
+    alertsCount: hasDivergence ? 1 : 0,
+    matchedEmbs: matchedEmbs
   };
 }
 
@@ -3027,10 +3157,44 @@ window.openStageDetailModal = function(stageCode, highlightSlot = null, paleteIn
 
   slotsHtml += `</div></div>`;
 
-  // 6. Dados do Embarque
+  // 6. Dados do(s) Embarque(s)
   let embDetailsHtml = '';
-  if (stgInfo.embarque) {
-    const eObj = stgInfo.embarque;
+  const allMatches = (stgInfo.matchedEmbs && stgInfo.matchedEmbs.length > 0) ? stgInfo.matchedEmbs : (stgInfo.embarque ? [{ embarque: stgInfo.embarque, palletsInStage: stgInfo.palletsInThisStage }] : []);
+
+  if (allMatches.length > 1) {
+    // Múltiplos embarques alocados neste mesmo stage (ex: SO56 com 3 embarques)
+    embDetailsHtml = `
+      <div style="background: #F8FAFC; border: 1px solid var(--border-light); border-radius: 8px; padding: 12px 14px; font-size: 0.85rem; margin-top: 10px;">
+        <div style="font-weight: 800; color: #1E293B; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+          <span>📦 <b>${allMatches.length} Embarques alocados neste Stage (${cleanStageCode}):</b></span>
+          <span style="font-size: 0.74rem; color: #64748B; font-weight: 600;">Clique em qualquer um para entrar e bipar os paletes dele</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          ${allMatches.map(m => {
+            const eObj = m.embarque;
+            const pltsCount = m.palletsInStage || (eObj.paletes ? eObj.paletes.filter(p => normalizeStageName(p.stage) === cleanStageCode).length : 0);
+            return `
+              <div style="background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div>
+                  <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A;">
+                    Embarque: <span style="color:#D40511;">${eObj.embarque}</span>
+                    ${eObj.transportadora ? `<span style="font-size:0.75rem; background:#F1F5F9; color:#334155; padding:2px 7px; border-radius:4px; margin-left:6px; font-weight:700;">🚛 ${eObj.transportadora}</span>` : ''}
+                  </div>
+                  <div style="font-size: 0.78rem; color: #64748B; margin-top: 3px;">
+                    Paletes neste stage: <b style="color:#0F172A;">${pltsCount}</b> &nbsp;•&nbsp; Total carga: <b>${eObj.total_paletes || 0}</b> plts ${eObj.placa ? '&nbsp;•&nbsp; Carreta: <b>' + eObj.placa + '</b>' : ''}
+                  </div>
+                </div>
+                <button type="button" class="btn-primary-clean" onclick="closeStageDetailModal(); window.entrarEmbarquePorId('${eObj.embarque}', '${cleanStageCode}')" style="font-size: 0.82rem; padding: 7px 16px; background: #D40511; color: #FFFFFF; border: none; border-radius: 6px; cursor: pointer; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(212,5,17,0.25);">
+                  ▶ Entrar no Embarque ${eObj.embarque}
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  } else if (allMatches.length === 1) {
+    const eObj = allMatches[0].embarque;
     let horaDocaStr = '';
     if (eObj.horario_doca) {
       try { horaDocaStr = new Date(eObj.horario_doca).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}); } catch(e) { horaDocaStr = String(eObj.horario_doca).slice(11,16); }
@@ -3194,14 +3358,39 @@ window.localizarEmbarqueUniversal = function(termo) {
     }
   }
 
+  // 4. Se não achou por número nem palete, busca se o termo é um Stage (ex: SO56, SO056, ST56)
+  const normStg = normalizeStageName(raw);
+  if (normStg && /^(SO|ST|STG|STAGE)/i.test(raw)) {
+    for (const k of Object.keys(database.embarques)) {
+      const emb = database.embarques[k];
+      if (!emb || emb.embarque !== k) continue;
+      const sList = Array.isArray(emb.stages) ? emb.stages : String(emb.stages || '').split(/[\s,]+/);
+      const hasDirectStage = sList.some(s => normalizeStageName(s) === normStg) ||
+        (emb.paletes && Array.isArray(emb.paletes) && emb.paletes.some(p => p && normalizeStageName(p.stage) === normStg));
+      if (hasDirectStage) {
+        window._pendingTargetPhysicalStage = normStg;
+        return {
+          embarque: emb,
+          encontradoPor: 'stage',
+          stageBuscado: normStg,
+          termoBuscado: raw
+        };
+      }
+    }
+  }
+
   return null;
 };
 
-window.entrarEmbarquePorId = function(embId) {
+window.entrarEmbarquePorId = function(embId, stageCode) {
   if (!embId) return;
-  closeDashboard();
+  if (typeof closeDashboard === 'function') closeDashboard();
+  if (typeof closeStageDetailModal === 'function') closeStageDetailModal();
   const input = document.getElementById('inputEmbarque');
   if (input) input.value = embId;
+  if (stageCode) {
+    window._pendingTargetPhysicalStage = normalizeStageName(stageCode);
+  }
   entrarNoEmbarque();
 };
 
@@ -3244,6 +3433,8 @@ function entrarNoEmbarque() {
 
   if (buscaRes.encontradoPor === 'palete') {
     showToast(`🎯 <b>Palete Localizado!</b> Embarque identificado: <b>${embId}</b>`);
+  } else if (buscaRes.encontradoPor === 'stage') {
+    showToast(`🎯 <b>Stage ${buscaRes.stageBuscado} Localizado!</b> Embarque identificado: <b>${embId}</b>`);
   }
   if (!Array.isArray(activeEmbarque.paletes)) {
     activeEmbarque.paletes = [activeEmbarque.paletes];
@@ -3255,7 +3446,8 @@ function entrarNoEmbarque() {
   const existingPartial = getPartialConferenceSession(embId);
 
   const allStages = (activeEmbarque.stages && activeEmbarque.stages.length > 0) ? activeEmbarque.stages : ['STAGE'];
-  const initialPhysicalStage = normalizeStageName(allStages[0]);
+  const initialPhysicalStage = window._pendingTargetPhysicalStage || normalizeStageName(allStages[0]);
+  window._pendingTargetPhysicalStage = null;
   const stageCap = getStageCapacity(initialPhysicalStage);
 
   if (existingPartial) {
@@ -6113,7 +6305,19 @@ window.StageMapAdapter = (function () {
   // Monta o pátio a partir do estado REAL: base (Power BI / planilha) + bipagens (conferência ativa e parciais de todos os embarques).
   // Cada palete vai para o stage/vaga físicos onde foi bipado; quem ainda não foi bipado aparece no stage sistêmico (DSTLOC) como "aguardando".
   let cache = { sig: null, out: null };
-  const rowOf = (o) => ({ lpn: o.lpn, stage: o.stage || '', vaga: o.vaga == null ? '' : o.vaga, embarque: o.embarque == null ? '' : String(o.embarque), status: o.status, sku: o.sku || '', lote: o.lote || '', qtd: o.qtd || '' });
+  const rowOf = (o) => ({
+    lpn: o.lpn,
+    stage: o.stage || '',
+    vaga: o.vaga == null ? '' : o.vaga,
+    embarque: o.embarque == null ? '' : String(o.embarque),
+    status: o.status,
+    sku: o.sku || '',
+    lote: o.lote || '',
+    qtd: o.qtd || '',
+    motivo: o.motivo || '',
+    stageWms: o.stageWms || '',
+    stageFisico: o.stageFisico || ''
+  });
 
   return function () {
     if (!database || !database.embarques) return null;
@@ -6136,7 +6340,14 @@ window.StageMapAdapter = (function () {
           const list = Array.isArray(sl.paletes) && sl.paletes.length ? sl.paletes : ((sl.lpn || sl.palete) ? [sl] : []);
           list.forEach(p => {
             const lpn = p.lpn || p.palete; if (!lpn) return;
-            phys.set(lpn, { stage: stg, slot: parseInt(k, 10) || sl.slot, status: p.status || sl.status, emb: embId });
+            phys.set(lpn, {
+              stage: stg,
+              slot: parseInt(k, 10) || sl.slot,
+              status: p.status || sl.status,
+              emb: embId,
+              details: p.details || sl.details || p.auditNotes || sl.auditNotes || p.motivo || sl.motivo || '',
+              motivo: p.motivo || sl.motivo || p.details || sl.details || ''
+            });
             ocupadas.add(normalizeStageName(stg) + '|' + (parseInt(k, 10) || sl.slot));
           });
         });
@@ -6157,17 +6368,41 @@ window.StageMapAdapter = (function () {
         const c = conf.get(lpn), ph = phys.get(lpn);
         const div = (c && (c.isDivergent || c.status === 'divergent')) || (ph && ph.status === 'divergent');
         const ok = (c && c.status === 'done') || (ph && ph.status === 'done');
+        let motivo = '';
+        if (div) {
+          motivo = (c && (c.auditNotes || c.details || c.motivo)) || (ph && (ph.details || ph.auditNotes || ph.motivo)) || '';
+          if (!motivo && (c && c.stageFisico && p.stage && normalizeStageName(c.stageFisico) !== normalizeStageName(p.stage))) {
+            motivo = 'Alocado no stage ' + c.stageFisico + ' (Previsto WMS: ' + p.stage + ')';
+          }
+          if (!motivo) motivo = 'Divergência apontada na conferência deste palete';
+        }
         rows.push(rowOf({
           lpn: lpn, embarque: e.embarque,
           stage: (ph && ph.stage) || (c && (c.stageFisico || c.stage)) || p.stage,
           vaga: ph ? ph.slot : (c && c.slot),
           status: div ? 'divergencia' : ok ? 'conferido' : 'aguardando',
-          sku: p.sku_resumo, lote: p.itens && p.itens[0] && p.itens[0].lote, qtd: p.qtd_total
+          sku: p.sku_resumo, lote: p.itens && p.itens[0] && p.itens[0].lote, qtd: p.qtd_total,
+          motivo: motivo,
+          stageWms: p.stage,
+          stageFisico: (ph && ph.stage) || (c && c.stageFisico) || p.stage
         }));
       });
     });
     // bipados que não existem na base (material não planejado)
-    phys.forEach((ph, lpn) => { if (!naBase.has(lpn)) rows.push(rowOf({ lpn: lpn, stage: ph.stage, vaga: ph.slot, embarque: ph.emb, status: 'divergencia', sku: 'Não planejado' })); });
+    phys.forEach((ph, lpn) => {
+      if (!naBase.has(lpn)) {
+        rows.push(rowOf({
+          lpn: lpn,
+          stage: ph.stage,
+          vaga: ph.slot,
+          embarque: ph.emb,
+          status: 'divergencia',
+          sku: 'Não planejado',
+          motivo: 'LPN não cadastrada na carga WMS (Material não planejado)',
+          stageFisico: ph.stage
+        }));
+      }
+    });
     // vaga que está sendo bipada agora
     if (ac.embarqueId && ac.currentPhysicalStage && ac.activeSlot && !ocupadas.has(normalizeStageName(ac.currentPhysicalStage) + '|' + ac.activeSlot)) {
       rows.push(rowOf({ lpn: 'Próxima vaga', stage: ac.currentPhysicalStage, vaga: ac.activeSlot, embarque: ac.embarqueId, status: 'ativo' }));
@@ -6268,7 +6503,7 @@ window.StageMapConsolidacaoAdapter = function() {
       const pal = palletsInThis[pIdx];
 
       if (isBlk) {
-        return { pos: posLetter, status: 'divergencia', lpn: pal ? pal.palete : '', sku: pal ? (pal.sku_resumo || '') : '' };
+        return { pos: posLetter, status: 'divergencia', lpn: pal ? pal.palete : '', sku: pal ? (pal.sku_resumo || '') : '', motivo: 'Stage bloqueado pela liderança operacional' };
       }
 
       if (sessSlot && sessSlot.status === 'done') {
@@ -6296,7 +6531,8 @@ window.StageMapConsolidacaoAdapter = function() {
           sku: sessSlot.sku || (pal ? pal.sku_resumo : ''),
           lote: sessSlot.lote || (pal ? pal.lote : ''),
           qtd: sessSlot.qtd || 30,
-          cap: 40
+          cap: 40,
+          motivo: sessSlot.details || sessSlot.auditNotes || sessSlot.motivo || 'Divergência detectada na conferência'
         };
       }
 
