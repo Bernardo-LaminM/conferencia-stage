@@ -581,6 +581,9 @@ function loadData() {
     } catch (e) {}
   }
 
+  if (typeof window.sanitizePartialConferences === 'function') {
+    window.sanitizePartialConferences();
+  }
   updateBaseInfoUI();
   updateHistoryBadge();
 }
@@ -2320,6 +2323,145 @@ window.handleDashSearch = function(val) {
 };
 
 /* =========================================================
+   ORDENAÇÃO POR RECÊNCIA & SANITIZAÇÃO DE STAGES ZERADOS
+   ========================================================= */
+window.getEmbarqueTimestamp = function(emb) {
+  if (!emb) return 0;
+  if (emb.horario_doca) {
+    const t = new Date(emb.horario_doca).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (emb.janela_embarque) {
+    const t = new Date(emb.janela_embarque).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (emb.data_embarque) {
+    const t = new Date(emb.data_embarque).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (emb.atualizado_em) {
+    const t = new Date(emb.atualizado_em).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  // Se não tem timestamp explícito, o número sequencial do embarque indica o mais novo
+  const num = parseInt(String(emb.embarque || '').replace(/\D/g, ''), 10);
+  return isNaN(num) ? 0 : num;
+};
+
+window.sanitizePartialConferences = function() {
+  try {
+    const raw = localStorage.getItem(STORAGE_PARTIAL_CONFERENCES_KEY);
+    if (!raw) return;
+    const partials = JSON.parse(raw);
+    const todayStr = new Date().toDateString();
+    let changed = false;
+
+    // Mapeia stage -> embarque oficial da base atual
+    const stageToEmbarque = new Map();
+    if (database && database.embarques) {
+      Object.values(database.embarques).forEach(e => {
+        if (!e || !e.embarque) return;
+        const sList = Array.isArray(e.stages) ? e.stages : String(e.stages || '').split(/[\s,]+/);
+        sList.forEach(s => {
+          const norm = normalizeStageName(s);
+          if (norm && !stageToEmbarque.has(norm)) stageToEmbarque.set(norm, e.embarque);
+        });
+        if (e.paletes && Array.isArray(e.paletes)) {
+          e.paletes.forEach(p => {
+            const norm = normalizeStageName(p.stage);
+            if (norm && !stageToEmbarque.has(norm)) stageToEmbarque.set(norm, e.embarque);
+          });
+        }
+      });
+    }
+
+    Object.keys(partials).forEach(embId => {
+      const sess = partials[embId];
+      if (!sess) return;
+
+      // 1. Se a conferência foi feita em data anterior (ontem ou mais antiga), expira!
+      // "exemplo esse que eu fiz ontem e tiver outro depois, ele considera sempre o mais recente"
+      const sessDate = sess.lastUpdated || sess.iniciadoEm;
+      const isPastDay = sessDate && (new Date(sessDate).toDateString() !== todayStr);
+
+      if (isPastDay) {
+        delete partials[embId];
+        changed = true;
+        return;
+      }
+
+      // 2. Se o stage mudou de embarque na base, remove slots daquele stage (vem ZERADO)
+      if (sess.stageSlots) {
+        Object.keys(sess.stageSlots).forEach(stg => {
+          const normStg = normalizeStageName(stg);
+          const currentEmbOfStage = stageToEmbarque.get(normStg);
+          if (currentEmbOfStage && currentEmbOfStage !== embId && currentEmbOfStage.replace(/^0+/, '') !== embId.replace(/^0+/, '')) {
+            delete sess.stageSlots[stg];
+            changed = true;
+          }
+        });
+      }
+    });
+
+    if (changed) {
+      localStorage.setItem(STORAGE_PARTIAL_CONFERENCES_KEY, JSON.stringify(partials));
+    }
+  } catch(e) {}
+};
+
+window.zerarConferenciaStage = function(stageCode) {
+  const norm = normalizeStageName(stageCode);
+  if (!norm) return;
+
+  if (activeConference) {
+    if (activeConference.stageSlots && activeConference.stageSlots[norm]) {
+      delete activeConference.stageSlots[norm];
+    }
+    if (activeConference.currentPhysicalStage && normalizeStageName(activeConference.currentPhysicalStage) === norm) {
+      activeConference.slots = {};
+      activeConference.activeSlot = 1;
+    }
+    if (activeConference.divergencias) {
+      activeConference.divergencias = activeConference.divergencias.filter(d => 
+        normalizeStageName(d.stageFisico) !== norm && normalizeStageName(d.stageSistemico) !== norm
+      );
+    }
+  }
+
+  try {
+    const partials = JSON.parse(localStorage.getItem(STORAGE_PARTIAL_CONFERENCES_KEY) || '{}');
+    let mudou = false;
+    Object.keys(partials).forEach(embId => {
+      const sess = partials[embId];
+      if (sess && sess.stageSlots && sess.stageSlots[norm]) {
+        delete sess.stageSlots[norm];
+        mudou = true;
+      }
+      if (sess && sess.currentPhysicalStage && normalizeStageName(sess.currentPhysicalStage) === norm) {
+        sess.slots = {};
+        mudou = true;
+      }
+      if (sess && sess.divergencias) {
+        sess.divergencias = sess.divergencias.filter(d => 
+          normalizeStageName(d.stageFisico) !== norm && normalizeStageName(d.stageSistemico) !== norm
+        );
+        mudou = true;
+      }
+    });
+    if (mudou) {
+      localStorage.setItem(STORAGE_PARTIAL_CONFERENCES_KEY, JSON.stringify(partials));
+    }
+  } catch(e) {}
+
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (window.StageMap && typeof window.StageMap.refresh === 'function') window.StageMap.refresh(true);
+  if (typeof renderStageSlotsGrid === 'function') renderStageSlotsGrid();
+  if (typeof updateUI === 'function') updateUI();
+
+  showToast(`Stage <b>${norm}</b> zerado com sucesso! Limpo para conferência.`);
+};
+
+/* =========================================================
    DIAGNÓSTICO DETALHADO DE DIVERGÊNCIAS (TOOLTIP & AUDITORIA)
    ========================================================= */
 window.getDivergenceDescription = function(lpn, stageId, pos, embarqueId) {
@@ -2469,6 +2611,13 @@ function getDashboardStageInfo(stageCode) {
     });
   }
 
+  // Ordena SEMPRE pelo embarque mais recente primeiro ("ele considera sempre o mais recente")
+  matchedEmbs.sort((a, b) => {
+    const tA = window.getEmbarqueTimestamp(a.embarque);
+    const tB = window.getEmbarqueTimestamp(b.embarque);
+    return tB - tA;
+  });
+
   const stageCap = getStageCapacity(stageCode);
   const blockedSlots = getStageBlockedSlots(stageCode);
   const isManuallyBlocked = window.isStageBlocked(stageCode) || window.isStageBlocked(normStage);
@@ -2547,15 +2696,18 @@ function getDashboardStageInfo(stageCode) {
       normalizeStageName(d.stageFisico) === normStage || normalizeStageName(d.stageSistemico) === normStage
     ) || Object.values(slots).some(s => s && s.status === 'divergent');
   } else if (partialSession) {
-    // 2. Conferência parcial salva deste embarque
-    if (partialSession.stageSlots && partialSession.stageSlots[normStage]) {
-      slots = partialSession.stageSlots[normStage];
-    } else if (partialSession.currentPhysicalStage && normalizeStageName(partialSession.currentPhysicalStage) === normStage) {
-      slots = partialSession.slots || {};
+    // 2. Conferência parcial salva deste embarque (somente se for do mesmo dia; ontem expira e vem ZERADO)
+    const isTodaySess = partialSession.lastUpdated && (new Date(partialSession.lastUpdated).toDateString() === new Date().toDateString());
+    if (isTodaySess) {
+      if (partialSession.stageSlots && partialSession.stageSlots[normStage]) {
+        slots = partialSession.stageSlots[normStage];
+      } else if (partialSession.currentPhysicalStage && normalizeStageName(partialSession.currentPhysicalStage) === normStage) {
+        slots = partialSession.slots || {};
+      }
+      conferidosCount = Object.values(slots).filter(s => s && s.status === 'done').length;
+      if (partialSession.divergencias && partialSession.divergencias.length > 0) hasDivergence = true;
+      if (Object.values(slots).some(s => s && s.status === 'divergent')) hasDivergence = true;
     }
-    conferidosCount = Object.values(slots).filter(s => s && s.status === 'done').length;
-    if (partialSession.divergencias && partialSession.divergencias.length > 0) hasDivergence = true;
-    if (Object.values(slots).some(s => s && s.status === 'divergent')) hasDivergence = true;
   } else if (completedAudit) {
     // 3. Auditoria concluída no histórico
     if (completedAudit.stageSlots && completedAudit.stageSlots[normStage]) {
@@ -3233,9 +3385,14 @@ window.openStageDetailModal = function(stageCode, highlightSlot = null, paleteIn
   if (footerInfo) {
     const isStgBlk = window.isStageBlocked && window.isStageBlocked(cleanStageCode);
     footerInfo.innerHTML = `
-      <button type="button" class="btn-secondary-clean" onclick="closeStageDetailModal(); solicitarToggleBloqueioStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: ${isStgBlk ? '#16A34A' : '#EF4444'}; color: ${isStgBlk ? '#15803D' : '#DC2626'}; font-weight: 800; background: ${isStgBlk ? '#F0FDF4' : '#FEF2F2'};">
-        ${isStgBlk ? '🔓 Desbloquear Stage ' + cleanStageCode : '🔒 Bloquear Stage ' + cleanStageCode}
-      </button>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <button type="button" class="btn-secondary-clean" onclick="closeStageDetailModal(); window.zerarConferenciaStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: #CBD5E1; color: #475569; font-weight: 800; background: #F8FAFC;" title="Limpa qualquer conferência residual deste stage e deixa-o 100% zerado">
+          🔄 Zerar Stage ${cleanStageCode}
+        </button>
+        <button type="button" class="btn-secondary-clean" onclick="closeStageDetailModal(); solicitarToggleBloqueioStage('${cleanStageCode}')" style="font-size: 0.78rem; padding: 6px 12px; border-color: ${isStgBlk ? '#16A34A' : '#EF4444'}; color: ${isStgBlk ? '#15803D' : '#DC2626'}; font-weight: 800; background: ${isStgBlk ? '#F0FDF4' : '#FEF2F2'};">
+          ${isStgBlk ? '🔓 Desbloquear Stage ' + cleanStageCode : '🔒 Bloquear Stage ' + cleanStageCode}
+        </button>
+      </div>
     `;
   }
 
@@ -6329,11 +6486,42 @@ window.StageMapAdapter = (function () {
       ac.embarqueId, ac.conferidos ? ac.conferidos.size : 0, (ac.historico || []).length, ac.activeSlot, ac.currentPhysicalStage].join('§');
     if (cache.out && cache.sig === sig && cache.db === database) return cache.out;
 
+    if (typeof window.sanitizePartialConferences === 'function') window.sanitizePartialConferences();
+    const todayStr = new Date().toDateString();
+
+    // Mapeia stage -> embarque oficial da base atual
+    const stageOwnerMap = new Map();
+    Object.values(database.embarques).forEach(e => {
+      if (!e || !e.embarque) return;
+      const sList = Array.isArray(e.stages) ? e.stages : String(e.stages || '').split(/[\s,]+/);
+      sList.forEach(s => {
+        const norm = normalizeStageName(s);
+        if (norm && !stageOwnerMap.has(norm)) stageOwnerMap.set(norm, e.embarque);
+      });
+      if (e.paletes && Array.isArray(e.paletes)) {
+        e.paletes.forEach(p => {
+          const norm = normalizeStageName(p.stage);
+          if (norm && !stageOwnerMap.has(norm)) stageOwnerMap.set(norm, e.embarque);
+        });
+      }
+    });
+
     const conf = new Map(), phys = new Map(), ocupadas = new Set();
     const addSession = (s, embId) => {
       if (!s) return;
+      // Se a conferência foi feita em data anterior (ontem), não polui o pátio de hoje!
+      const sessDate = s.lastUpdated || s.iniciadoEm;
+      if (sessDate && new Date(sessDate).toDateString() !== todayStr) return;
+
       (s.conferidos || []).forEach(en => { if (Array.isArray(en)) conf.set(en[0], en[1] || {}); });
       Object.keys(s.stageSlots || {}).forEach(stg => {
+        const normStg = normalizeStageName(stg);
+        // Se o stage pertence oficialmente a outro embarque na base, descarta slots antigos (vem ZERADO)
+        const ownerEmb = stageOwnerMap.get(normStg);
+        if (ownerEmb && ownerEmb !== embId && ownerEmb.replace(/^0+/, '') !== embId.replace(/^0+/, '')) {
+          return;
+        }
+
         const slots = s.stageSlots[stg] || {};
         Object.keys(slots).forEach(k => {
           const sl = slots[k] || {};

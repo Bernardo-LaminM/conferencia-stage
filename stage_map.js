@@ -164,7 +164,12 @@
         }
         return x;
       });
-      var embs = Object.keys(ec).sort(function (a, b) { return ec[b] - ec[a]; });
+      var embs = Object.keys(ec).sort(function (a, b) {
+        var tA = (typeof window.getEmbarqueTimestamp === 'function' && window.database && window.database.embarques) ? window.getEmbarqueTimestamp(window.database.embarques[a]) : 0;
+        var tB = (typeof window.getEmbarqueTimestamp === 'function' && window.database && window.database.embarques) ? window.getEmbarqueTimestamp(window.database.embarques[b]) : 0;
+        if (tA && tB && tA !== tB) return tB - tA;
+        return (ec[b] || 0) - (ec[a] || 0);
+      });
       return { id: s.id, pre: s.pre, n: s.n, embarque: embs[0] || null, embarques: embs, slots: slots, excedente: over };
     });
     if (opt.preencher !== false) {
